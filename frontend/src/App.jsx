@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  GitPullRequest, 
-  ShieldAlert, 
-  Cpu, 
-  FileText, 
-  RefreshCw, 
-  ChevronDown, 
-  ChevronUp, 
-  ArrowLeft, 
-  Play, 
-  Terminal, 
-  Copy, 
+import {
+  GitPullRequest,
+  ShieldAlert,
+  Cpu,
+  FileText,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  ArrowLeft,
+  Play,
+  Terminal,
+  Copy,
   ExternalLink,
   Search,
   CheckCircle,
@@ -398,7 +398,7 @@ export default function App() {
   const [selectedPr, setSelectedPr] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSeverity, setFilterSeverity] = useState("all");
-  
+
   // Custom Live Trigger Form
   const [customDiff, setCustomDiff] = useState("");
   const [customRepo, setCustomRepo] = useState("yashpitrod/Agentic_AI");
@@ -459,7 +459,7 @@ export default function App() {
       }
 
       const result = await response.json();
-      
+
       // Inject returned real-time results into list
       const newPr = {
         repo: result.repo || customRepo,
@@ -479,7 +479,7 @@ export default function App() {
       setCustomDiff("");
     } catch (error) {
       console.warn("[SilentReviewer Dashboard] Backend API fetch failed or offline. Falling back to robust simulation...", error);
-      
+
       // FALLBACK SIMULATION logic mimicking complete Gemini orchestrator findings for the demo
       setTimeout(() => {
         let simulatedFindings = [];
@@ -592,16 +592,16 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
 
   // Filter & search PR list
   const filteredPrs = prs.filter(pr => {
-    const matchesSearch = pr.repo.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          pr.pr_title.toLowerCase().includes(searchQuery.toLowerCase());
-    
+    const matchesSearch = pr.repo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      pr.pr_title.toLowerCase().includes(searchQuery.toLowerCase());
+
     if (filterSeverity === 'all') return matchesSearch;
     return matchesSearch && pr.summary.highest_severity.toLowerCase() === filterSeverity;
   });
 
   return (
     <div className="min-h-screen p-6 md:p-12 max-w-7xl mx-auto flex flex-col gap-8">
-      
+
       {/* ==========================================
           HEADER SECTION (SilentReviewer Brand)
          ========================================== */}
@@ -616,7 +616,7 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
           </p>
         </div>
         <div className="flex gap-3">
-          <button 
+          <button
             onClick={() => setShowLiveForm(!showLiveForm)}
             className="neo-btn bg-[#5dfdcb] hover:bg-[#34e2aa] py-3 px-6 text-sm md:text-base flex items-center gap-2"
           >
@@ -636,35 +636,35 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
               <Terminal className="w-6 h-6 stroke-[3px]" />
               Trigger Live PR Diff Review
             </h3>
-            <button 
+            <button
               onClick={() => setShowLiveForm(false)}
               className="neo-btn bg-white py-1 px-3 text-xs"
             >
               Close
             </button>
           </div>
-          
+
           <form onSubmit={handleReviewDiff} className="flex flex-col gap-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-black uppercase">GitHub Repository Name</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={customRepo}
                   onChange={(e) => setCustomRepo(e.target.value)}
-                  className="neo-input" 
-                  placeholder="e.g. facebook/react" 
+                  className="neo-input"
+                  placeholder="e.g. facebook/react"
                   required
                 />
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-black uppercase">PR Number</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   value={customPrNumber}
                   onChange={(e) => setCustomPrNumber(e.target.value)}
-                  className="neo-input" 
-                  placeholder="e.g. 176" 
+                  className="neo-input"
+                  placeholder="e.g. 176"
                   required
                 />
               </div>
@@ -675,10 +675,10 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
                 <span>Unified Diff Patch</span>
                 <span className="text-xs text-gray-600">Must prefix additions with +</span>
               </label>
-              <textarea 
+              <textarea
                 value={customDiff}
                 onChange={(e) => setCustomDiff(e.target.value)}
-                className="neo-input font-mono-brutal min-h-[160px] text-sm" 
+                className="neo-input font-mono-brutal min-h-[160px] text-sm"
                 placeholder={`+ password = "admin123"\n+ query = "SELECT * FROM users WHERE id = " + user_id`}
                 required
               />
@@ -688,8 +688,8 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
               <div className="text-xs font-bold text-gray-700">
                 ⭐ Tips: Paste credentials or concatenations to trigger security findings!
               </div>
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={isLiveLoading}
                 className="neo-btn bg-[#ff5e97] hover:bg-[#ff2d75] py-3 px-8 text-white uppercase tracking-wider flex items-center gap-2"
               >
@@ -714,25 +714,25 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
           MAIN VIEWS SWITCHER
          ========================================== */}
       {!selectedPr ? (
-        
+
         // ==========================================
         // VIEW 1: DASHBOARD LIST VIEW
         // ==========================================
         <div className="flex flex-col gap-6">
-          
+
           {/* SEARCH, FILTERS & SUMMARY */}
           <div className="neo-card bg-[#ff9f68] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="flex items-center gap-3 w-full md:w-auto">
               <Search className="w-6 h-6 stroke-[3px]" />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="neo-input w-full md:w-80" 
-                placeholder="Search repo or PR title..." 
+                className="neo-input w-full md:w-80"
+                placeholder="Search repo or PR title..."
               />
             </div>
-            
+
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
               <span className="text-sm font-black uppercase">Filter Severity:</span>
               <div className="flex rounded-none overflow-hidden border-4 border-black">
@@ -740,9 +740,8 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
                   <button
                     key={sev}
                     onClick={() => setFilterSeverity(sev)}
-                    className={`px-4 py-2 font-bold uppercase text-xs transition-colors border-r-2 last:border-r-0 border-black cursor-pointer ${
-                      filterSeverity === sev ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'
-                    }`}
+                    className={`px-4 py-2 font-bold uppercase text-xs transition-colors border-r-2 last:border-r-0 border-black cursor-pointer ${filterSeverity === sev ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'
+                      }`}
                   >
                     {sev}
                   </button>
@@ -756,8 +755,8 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
             {filteredPrs.map((pr, index) => {
               const style = getSeverityStyle(pr.summary.highest_severity);
               return (
-                <div 
-                  key={index} 
+                <div
+                  key={index}
                   onClick={() => setSelectedPr(pr)}
                   className="neo-card bg-white hover:bg-[#fffdf5] cursor-pointer neo-shadow-hover flex flex-col justify-between min-h-[220px]"
                 >
@@ -767,13 +766,13 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
                         <GitPullRequest className="w-4 h-4 stroke-[2.5px]" />
                         {pr.repo}#{pr.pr_number}
                       </span>
-                      
+
                       {/* Overall Severity Badge */}
                       <span className={`border-2 border-black px-3 py-1 font-bold text-xs uppercase shadow-[2px_2px_0px_rgba(0,0,0,1)] ${style.bg}`}>
                         {style.label}
                       </span>
                     </div>
-                    
+
                     <h2 className="text-xl md:text-2xl font-black leading-tight border-b-2 border-black pb-2 mt-2 select-none">
                       {pr.pr_title}
                     </h2>
@@ -807,10 +806,10 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
         // VIEW 2: PR DETAIL VIEW
         // ==========================================
         <div className="flex flex-col gap-6">
-          
+
           {/* TOP BAR / NAVIGATION */}
           <div className="flex justify-between items-center">
-            <button 
+            <button
               onClick={() => setSelectedPr(null)}
               className="neo-btn bg-white hover:bg-gray-100 py-2 px-5 text-sm flex items-center gap-2"
             >
@@ -861,13 +860,13 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
 
           {/* TWO PANEL DETAIL LAYOUT */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            
+
             {/* LEFT COLUMN: 4 EXPANDABLE ACCORDIONS (Lg: 7 cols) */}
             <div className="lg:col-span-7 flex flex-col gap-6">
-              
+
               {/* SECTION 1: SECURITY AGENT ACCORDION */}
               <div className="neo-card bg-[#fff] border-4 border-black p-0 overflow-hidden">
-                <button 
+                <button
                   onClick={() => toggleSection('security')}
                   className="w-full bg-[#ff5e97] p-4 text-left font-black uppercase text-lg md:text-xl flex justify-between items-center border-b-4 border-black"
                 >
@@ -912,7 +911,7 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
 
               {/* SECTION 2: ARCHITECTURE AGENT ACCORDION */}
               <div className="neo-card bg-[#fff] border-4 border-black p-0 overflow-hidden">
-                <button 
+                <button
                   onClick={() => toggleSection('architecture')}
                   className="w-full bg-[#ffc542] p-4 text-left font-black uppercase text-lg md:text-xl flex justify-between items-center border-b-4 border-black"
                 >
@@ -953,7 +952,7 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
 
               {/* SECTION 3: TEST GAPS ACCORDION */}
               <div className="neo-card bg-[#fff] border-4 border-black p-0 overflow-hidden">
-                <button 
+                <button
                   onClick={() => toggleSection('test_gaps')}
                   className="w-full bg-[#6fe7db] p-4 text-left font-black uppercase text-lg md:text-xl flex justify-between items-center border-b-4 border-black"
                 >
@@ -990,7 +989,7 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
 
               {/* SECTION 4: STYLISTIC CONSISTENCY ACCORDION */}
               <div className="neo-card bg-[#fff] border-4 border-black p-0 overflow-hidden">
-                <button 
+                <button
                   onClick={() => toggleSection('consistency')}
                   className="w-full bg-[#ff9f68] p-4 text-left font-black uppercase text-lg md:text-xl flex justify-between items-center border-b-4 border-black"
                 >
@@ -1027,14 +1026,14 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
 
             {/* RIGHT COLUMN: GITHUB COMMENT PREVIEW (Lg: 5 cols) */}
             <div className="lg:col-span-5 flex flex-col gap-6">
-              
+
               <div className="neo-card bg-[#FFF37A] border-4 border-black p-0 overflow-hidden neo-shadow-lg">
                 <div className="bg-black text-white p-4 font-black uppercase text-base flex justify-between items-center">
                   <span className="flex items-center gap-2">
                     <ExternalLink className="w-5 h-5 text-[#5dfdcb]" />
                     GitHub Comment Preview
                   </span>
-                  <button 
+                  <button
                     onClick={() => copyToClipboard(selectedPr.markdown)}
                     className="neo-btn bg-[#5dfdcb] hover:bg-[#2bfcaa] py-1 px-3 text-black text-xs uppercase"
                   >
@@ -1051,7 +1050,7 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
                   {/* Rendered Markdown Box Mock */}
                   <div className="bg-[#fafafa] border-4 border-black p-4 neo-shadow shadow-[2px_2px_0px_rgba(0,0,0,1)] text-sm font-sans flex flex-col gap-4">
                     <h4 className="text-xl font-black border-b-2 border-black pb-1 m-0">🤖 SilentReviewer</h4>
-                    
+
                     {/* Security fold mock */}
                     {selectedPr.state.security_findings?.length > 0 && (
                       <div>
@@ -1104,7 +1103,7 @@ ${f.refactor_suggestion ? `* **Refactor Suggestion:** ${f.refactor_suggestion}` 
 
               {/* RAW MARKDOWN CODE BOX */}
               <div className="neo-card bg-[#fff] border-4 border-black p-0 overflow-hidden">
-                <button 
+                <button
                   onClick={() => toggleSection('markdown')}
                   className="w-full bg-[#a6e3e9] p-4 text-left font-black uppercase text-sm md:text-base flex justify-between items-center border-b-4 border-black"
                 >

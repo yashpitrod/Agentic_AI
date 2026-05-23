@@ -185,28 +185,91 @@ def format_review_markdown(final_review: dict) -> str:
         "",
         f"**Overall severity:** {final_review.get('overall_severity', 'none').upper()}",
         "",
-        "### Security",
-        *_format_items(final_review.get("security", [])),
+        "### 🔴 Security Agent Findings",
+        *format_security_items(final_review.get("security", [])),
         "",
-        "### Architecture",
-        *_format_items(final_review.get("architecture", [])),
+        "### 🟡 Architecture Agent Findings",
+        *format_architecture_items(final_review.get("architecture", [])),
         "",
-        "### Test Gaps",
-        *_format_items(final_review.get("test_gaps", [])),
+        "### 🟢 Test Gap Detector Alerts",
+        *format_test_gap_items(final_review.get("test_gaps", [])),
         "",
-        "### Consistency",
-        *_format_items(final_review.get("consistency", [])),
+        "### 🔵 Stylistic Consistency Findings",
+        *format_consistency_items(final_review.get("consistency", [])),
     ]
     return "\n".join(lines)
 
 
-def _format_items(items: list[dict]) -> list[str]:
+def format_security_items(items: list[dict]) -> list[str]:
     if not items:
-        return ["- No findings."]
-    return [f"- {item}" for item in items]
+        return ["- No security vulnerabilities detected."]
+    res = []
+    for item in items:
+        sev = item.get("severity", "warning").upper()
+        res.append(
+            f"<details>\n"
+            f"<summary><b>[{sev}] {item.get('issue_type', 'Vulnerability')}</b> in <code>{item.get('file', 'unknown')}</code></summary>\n\n"
+            f"* **Description:** {item.get('description', '')}\n"
+            f"* **Line Hint:** `{item.get('line_hint', '')}`\n"
+            f"</details>\n"
+        )
+    return res
+
+
+def format_architecture_items(items: list[dict]) -> list[str]:
+    if not items:
+        return ["- No architectural design issues detected."]
+    res = []
+    for item in items:
+        sev = item.get("severity", "warning").upper()
+        res.append(
+            f"<details>\n"
+            f"<summary><b>[{sev}] {item.get('violation_type', 'Violation')}</b></summary>\n\n"
+            f"* **Description:** {item.get('description', '')}\n"
+            f"* **Refactor Suggestion:** *{item.get('refactor_suggestion', '')}*\n"
+            f"</details>\n"
+        )
+    return res
+
+
+def format_test_gap_items(items: list[dict]) -> list[str]:
+    if not items:
+        return ["- No test coverage gaps found."]
+    res = []
+    for item in items:
+        res.append(
+            f"<details>\n"
+            f"<summary><b>[WARNING] Missing Coverage</b> for <code>{item.get('function', '')}</code> in <code>{item.get('file', 'unknown')}</code></summary>\n\n"
+            f"* **Description:** This newly added or modified function lacks corresponding test coverage.\n"
+            f"* **Missing Scenario:** {item.get('missing_test', '')}\n"
+            f"</details>\n"
+        )
+    return res
+
+
+def format_consistency_items(items: list[dict]) -> list[str]:
+    if not items:
+        return ["- No style or historical pattern inconsistencies detected."]
+    res = []
+    for item in items:
+        sev = item.get("severity", "info").upper()
+        res.append(
+            f"<details>\n"
+            f"<summary><b>[{sev}] Style Inconsistency</b> in <code>{item.get('location', 'unknown')}</code></summary>\n\n"
+            f"* **Description:** {item.get('issue', '')}\n"
+            f"</details>\n"
+        )
+    return res
+
 
 
 if __name__ == "__main__":
+    import sys
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+        
     demo = PRData(
         repo_name="demo/repo",
         pr_number=1,
@@ -215,3 +278,4 @@ if __name__ == "__main__":
         author="local",
     )
     print(asyncio.run(review_pr_data(demo)))
+
