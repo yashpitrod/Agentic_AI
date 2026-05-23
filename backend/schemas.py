@@ -1,11 +1,16 @@
 from pydantic import BaseModel, Field
 
+class PRData(BaseModel):
+    repo_name: str
+    pr_number: int
+    diff_text: str
+    pr_title: str
+    author: str
 
 class ManualReviewRequest(BaseModel):
     diff: str = Field(..., min_length=1, description="Unified git diff text to review.")
     repo: str | None = Field(default=None, description="Optional owner/repo name.")
     pr_number: int | None = Field(default=None, description="Optional pull request number.")
-
 
 class WebhookAck(BaseModel):
     status: str

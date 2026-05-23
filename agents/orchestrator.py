@@ -2,7 +2,45 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from typing import TypedDict
+import langgraph
+import langchain_google_genai
+from langgraph.graph import StateGraph, START, END
 
+# --- SECTION 1: LANGGRAPH ORCHESTRATION SKELETON (Phase 1 Setup) ---
+
+# Define a simple dummy state Dict
+class GraphState(TypedDict):
+    dummy_key: str
+
+# Define nodes as requested
+def start_node(state: GraphState) -> GraphState:
+    print("Graph started")
+    return {"dummy_key": "started"}
+
+def end_node(state: GraphState) -> GraphState:
+    print("Graph ended")
+    return {"dummy_key": "ended"}
+
+# Initialize StateGraph
+workflow = StateGraph(GraphState)
+
+# Add exactly two nodes
+workflow.add_node("start_node", start_node)
+workflow.add_node("end_node", end_node)
+
+# Connect start_node to end_node with an edge
+workflow.add_edge("start_node", "end_node")
+
+# Setup START and END edges
+workflow.add_edge(START, "start_node")
+workflow.add_edge("end_node", END)
+
+# Compile the graph
+app = workflow.compile()
+
+
+# --- SECTION 2: ASYNC PR REVIEW AGENT LOGIC (Partner's Logic) ---
 
 @dataclass
 class AgentFinding:
@@ -126,3 +164,16 @@ def format_review_markdown(findings: list[AgentFinding]) -> str:
     for finding in findings:
         lines.append(f"| {finding.severity.upper()} | {finding.agent} | {finding.title}: {finding.details} |")
     return "\n".join(lines)
+
+
+# --- SECTION 3: LOCAL SKELETON EXECUTION TEST ---
+
+if __name__ == "__main__":
+    print("LangGraph & LangChain Google GenAI imports successful!")
+    print("Executing LangGraph skeleton skeleton locally...")
+    
+    # Run/invoke the graph with an initial dummy state
+    initial_state: GraphState = {"dummy_key": "init"}
+    result = app.invoke(initial_state)
+    
+    print(f"Final State result: {result}")
