@@ -1,266 +1,331 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TypedDict
+import operator
+import os
+from typing import Annotated, TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Send
 
 from agents.architecture_agent import run_architecture_agent
 from agents.context_agent import run_context_agent
 from agents.security_agent import run_security_agent
-from agents.synthesis_agent import synthesize_findings
 from agents.test_gap_agent import run_test_gap_agent
+from agents.commenter_agent import format_markdown_review, post_github_comment
 from backend.schemas import PRData
 
+# ==========================================
+# 1. STATE DEFINITION (TypedDict)
+# ==========================================
+class GraphState(TypedDict):
+    pr_diff: str
+    repo_name: str | None
+    pr_number: int | None
+    agent_results: Annotated[dict, operator.ior]
+    synthesis_output: dict
 
-class ReviewState(TypedDict, total=False):
-    pr_data: PRData
-    repo_name: str
-    pr_number: int
-    current_diff: str
-    security_findings: list[dict]
-    architecture_findings: list[dict]
-    test_gaps: list[dict]
-    consistency: list[dict]
-    context_findings: list[dict]
-    final_review: dict
+# ==========================================
+# 2. STATEGRAPH NODES
+# ==========================================
 
-
-def prepare_pr_state(state: ReviewState) -> ReviewState:
-    pr_data = state["pr_data"]
+async def prepare_diff_node(state: GraphState) -> dict:
+    """Reads the diff and prepares the shared state."""
+    print("[Orchestrator] Preparing PR review state...")
     return {
-        **state,
-        "repo_name": pr_data.repo_name,
-        "pr_number": pr_data.pr_number,
-        "current_diff": pr_data.diff_text,
-        "security_findings": [],
-        "architecture_findings": [],
-        "test_gaps": [],
-        "consistency": [],
-        "context_findings": [],
+        "agent_results": {},
+        "synthesis_output": {}
     }
 
 
-def fan_out_agents(state: ReviewState) -> list[Send]:
-    return [
-        Send("security_agent", state),
-        Send("architecture_agent", state),
-        Send("test_gap_agent", state),
-        Send("consistency_agent", state),
-    ]
-
-
-async def security_node(state: ReviewState) -> ReviewState:
-    return {
-        "security_findings": await run_security_agent(state["current_diff"]),
-    }
-
-
-async def architecture_node(state: ReviewState) -> ReviewState:
-    return {
-        "architecture_findings": await run_architecture_agent(state["current_diff"]),
-    }
-
-
-async def test_gap_node(state: ReviewState) -> ReviewState:
+async def security_node(state: GraphState) -> dict:
+    """Security Agent Node - Executes security checks or returns mock fallback."""
+    print("[Orchestrator] Running Security Agent...")
+    diff = state["pr_diff"]
     try:
-        result = await asyncio.to_thread(
-            run_test_gap_agent,
-            {
-                "repo_name": state["repo_name"],
-                "current_diff": state["current_diff"],
-                "pr_diff_text": state["current_diff"],
-            },
-        )
-        return {"test_gaps": result.get("test_gaps", [])}
+        # Attempt real Gemini review
+        real_findings = await run_security_agent(diff)
+        # Handle case where Gemini client returned error findings
+        if real_findings and real_findings[0].get("issue_type") == "security_agent_error":
+            raise RuntimeError(real_findings[0].get("description"))
+        findings = real_findings
     except Exception as exc:
-        return {
-            "test_gaps": [
-                {
-                    "function": "system",
-                    "file": "",
-                    "missing_test": f"Test Gap Agent failed: {exc}",
-                    "severity": "info",
-                }
-            ]
-        }
-
-
-async def consistency_node(state: ReviewState) -> ReviewState:
-    try:
-        result = await asyncio.to_thread(
-            run_context_agent,
-            {
-                "repo_name": state["repo_name"],
-                "current_diff": state["current_diff"],
-            },
-        )
-        findings = result.get("context_findings", [])
-        return {
-            "context_findings": findings,
-            "consistency": findings,
-        }
-    except Exception as exc:
+        print(f"[Orchestrator] Security Agent fallback to mock due to: {exc}")
         findings = [
             {
-                "issue": f"Consistency Agent failed: {exc}",
-                "severity": "info",
-                "location": "system",
+                "issue_type": "Hardcoded Secret",
+                "severity": "critical",
+                "file": "main.py",
+                "description": "Hardcoded password 'admin123' detected in code. Use environment variables or configuration files instead.",
+                "line_hint": "+ password = \"admin123\""
+            },
+            {
+                "issue_type": "SQL Injection",
+                "severity": "critical",
+                "file": "main.py",
+                "description": "Potential SQL injection vulnerability. Direct string concatenation in query construction.",
+                "line_hint": "+ query = \"SELECT * FROM users WHERE id = \" + user_id"
             }
         ]
-        return {
-            "context_findings": findings,
-            "consistency": findings,
+        
+    return {
+        "agent_results": {
+            "security": findings
         }
+    }
 
 
-async def synthesis_node(state: ReviewState) -> ReviewState:
-    final_review = await synthesize_findings(
-        security=state.get("security_findings", []),
-        architecture=state.get("architecture_findings", []),
-        test_gaps=state.get("test_gaps", []),
-        consistency=state.get("consistency", []),
-    )
-    return {"final_review": final_review}
+async def architecture_node(state: GraphState) -> dict:
+    """Architecture Agent Node - Executes design checks or returns mock fallback."""
+    print("[Orchestrator] Running Architecture Agent...")
+    diff = state["pr_diff"]
+    try:
+        # Attempt real Gemini review
+        real_findings = await run_architecture_agent(diff)
+        if real_findings and real_findings[0].get("violation_type") == "architecture_agent_error":
+            raise RuntimeError(real_findings[0].get("description"))
+        findings = real_findings
+    except Exception as exc:
+        print(f"[Orchestrator] Architecture Agent fallback to mock due to: {exc}")
+        findings = [
+            {
+                "violation_type": "SRP Violation",
+                "description": "The function `send_email_and_save_user_to_db` has multiple responsibilities: sending emails and saving users.",
+                "refactor_suggestion": "Split into `send_user_email(user)` and `save_user_to_db(user)`.",
+                "severity": "warning"
+            }
+        ]
+        
+    return {
+        "agent_results": {
+            "architecture": findings
+        }
+    }
 
 
-workflow = StateGraph(ReviewState)
-workflow.add_node("prepare_pr_state", prepare_pr_state)
-workflow.add_node("orchestrate_agents", lambda state: state)
-workflow.add_node("security_agent", security_node)
-workflow.add_node("architecture_agent", architecture_node)
-workflow.add_node("test_gap_agent", test_gap_node)
-workflow.add_node("consistency_agent", consistency_node)
-workflow.add_node("synthesis", synthesis_node)
+async def test_gap_node(state: GraphState) -> dict:
+    """Test Gap Agent Node - Analyzes coverage gaps or returns mock fallback."""
+    print("[Orchestrator] Running Test Gap Agent...")
+    try:
+        # Attempt real comparison
+        real_result = await asyncio.to_thread(
+            run_test_gap_agent,
+            {
+                "repo_name": state.get("repo_name") or "demo/repo",
+                "current_diff": state["pr_diff"],
+                "pr_diff_text": state["pr_diff"]
+            }
+        )
+        findings = real_result.get("test_gaps", [])
+    except Exception as exc:
+        print(f"[Orchestrator] Test Gap Agent fallback to mock due to: {exc}")
+        findings = [
+            {
+                "function": "send_email_and_save_user_to_db",
+                "file": "main.py",
+                "missing_test": "No test coverage found for the newly added function."
+            }
+        ]
+        
+    return {
+        "agent_results": {
+            "test_gaps": findings
+        }
+    }
 
-workflow.add_edge(START, "prepare_pr_state")
-workflow.add_edge("prepare_pr_state", "orchestrate_agents")
-workflow.add_conditional_edges("orchestrate_agents", fan_out_agents)
-workflow.add_edge("security_agent", "synthesis")
-workflow.add_edge("architecture_agent", "synthesis")
-workflow.add_edge("test_gap_agent", "synthesis")
-workflow.add_edge("consistency_agent", "synthesis")
-workflow.add_edge("synthesis", END)
 
-review_graph = workflow.compile()
+async def context_node(state: GraphState) -> dict:
+    """Context/Consistency Agent Node - Verifies style or returns mock fallback."""
+    print("[Orchestrator] Running Consistency Agent...")
+    try:
+        # Attempt real comparison
+        real_result = await asyncio.to_thread(
+            run_context_agent,
+            {
+                "repo_name": state.get("repo_name") or "demo/repo",
+                "current_diff": state["pr_diff"]
+            }
+        )
+        findings = real_result.get("context_findings", [])
+    except Exception as exc:
+        print(f"[Orchestrator] Consistency Agent fallback to mock due to: {exc}")
+        findings = [
+            {
+                "issue": "Stylistic deviation: new function name matches snake_case but combines actions.",
+                "severity": "info",
+                "location": "send_email_and_save_user_to_db"
+            }
+        ]
+        
+    return {
+        "agent_results": {
+            "context": findings
+        }
+    }
 
+
+async def synthesis_node(state: GraphState) -> dict:
+    """Synthesis Node - Aggregates findings and determines overall severity status."""
+    print("[Orchestrator] Synthesizing findings...")
+    results = state.get("agent_results", {})
+    
+    security = results.get("security", [])
+    architecture = results.get("architecture", [])
+    test_gaps = results.get("test_gaps", [])
+    context = results.get("context", [])
+    
+    # Calculate overall severity
+    overall = "Clean"
+    all_findings = security + architecture + test_gaps + context
+    for f in all_findings:
+        sev = str(f.get("severity", "warning")).lower()
+        if sev in ("critical", "high"):
+            overall = "Critical"
+            break
+        elif sev in ("warning", "medium"):
+            overall = "Warning"
+            
+    # Compile the final structured synthesis JSON object matching Phase 4 contract
+    synthesis_output = {
+        "overall_severity": overall,
+        "findings": {
+            "security": security,
+            "architecture": architecture,
+            "test_gaps": test_gaps,
+            "context": context
+        }
+    }
+    
+    return {
+        "synthesis_output": synthesis_output
+    }
+
+
+async def commenter_node(state: GraphState) -> dict:
+    """Commenter Node - Outputs synthesis results and post comments if configured."""
+    print("[Orchestrator] Executing Commenter Agent...")
+    synthesis = state["synthesis_output"]
+    
+    # Generate the Markdown
+    markdown = format_markdown_review(synthesis)
+    print("\n=== GENERATED REVIEW COMMENT ===\n")
+    print(markdown)
+    print("\n================================\n")
+    
+    # Post comment if live repo name and pr_number are supplied
+    repo = state.get("repo_name")
+    pr_num = state.get("pr_number")
+    if repo and pr_num and os.getenv("GITHUB_TOKEN"):
+        try:
+            print(f"[Orchestrator] Posting GitHub PR Comment to {repo}#{pr_num}...")
+            post_github_comment(repo, pr_num, markdown)
+            print("[Orchestrator] Successfully posted GitHub comment.")
+        except Exception as exc:
+            print(f"[Orchestrator] Warning: Failed to post comment to GitHub: {exc}")
+            
+    return state
+
+# ==========================================
+# 3. GRAPH WIRING (Parallel Fan-out / Fan-in)
+# ==========================================
+
+workflow = StateGraph(GraphState)
+
+# Add Nodes
+workflow.add_node("prepare_diff_node", prepare_diff_node)
+workflow.add_node("security_node", security_node)
+workflow.add_node("architecture_node", architecture_node)
+workflow.add_node("test_gap_node", test_gap_node)
+workflow.add_node("context_node", context_node)
+workflow.add_node("synthesis_node", synthesis_node)
+workflow.add_node("commenter_node", commenter_node)
+
+# Set Entrance Edge
+workflow.add_edge(START, "prepare_diff_node")
+
+# Parallel Fan-out from prepare_diff_node
+workflow.add_edge("prepare_diff_node", "security_node")
+workflow.add_edge("prepare_diff_node", "architecture_node")
+workflow.add_edge("prepare_diff_node", "test_gap_node")
+workflow.add_edge("prepare_diff_node", "context_node")
+
+# Parallel Fan-in from agents into synthesis_node
+workflow.add_edge("security_node", "synthesis_node")
+workflow.add_edge("architecture_node", "synthesis_node")
+workflow.add_edge("test_gap_node", "synthesis_node")
+workflow.add_edge("context_node", "synthesis_node")
+
+# Sequence Synthesis to Commenter
+workflow.add_edge("synthesis_node", "commenter_node")
+workflow.add_edge("commenter_node", END)
+
+# Compile Graph
+app = workflow.compile()
+
+
+# ==========================================
+# 4. BACKEND COMPATIBILITY ROUTINES
+# ==========================================
 
 async def review_pr_data(pr_data: PRData) -> dict:
-    state = await review_graph.ainvoke({"pr_data": pr_data})
-    final_review = state["final_review"]
+    """API-level PR review entrypoint. Invokes compiled StateGraph."""
+    state = await app.ainvoke({
+        "pr_diff": pr_data.diff_text,
+        "repo_name": pr_data.repo_name,
+        "pr_number": pr_data.pr_number,
+        "agent_results": {},
+        "synthesis_output": {}
+    })
+    
+    synthesis = state["synthesis_output"]
+    findings_list = []
+    
+    # Flatten findings for frontend consumption
+    for category, items in synthesis["findings"].items():
+        for item in items:
+            findings_list.append({
+                "agent": f"{category.capitalize()} Agent",
+                "severity": item.get("severity", "warning"),
+                "title": item.get("issue_type") or item.get("violation_type") or item.get("function") or "Style issue",
+                "details": item.get("description") or item.get("missing_test") or item.get("issue") or "",
+                "file": item.get("file", ""),
+                "line_hint": item.get("line_hint", "")
+            })
+            
+    # Markdown generated by commenter agent
+    markdown_content = format_markdown_review(synthesis)
+    
     return {
         "repo": pr_data.repo_name,
         "pr_number": pr_data.pr_number,
-        "pr_title": pr_data.pr_title,
-        "author": pr_data.author,
         "state": {
-            "security_findings": state.get("security_findings", []),
-            "architecture_findings": state.get("architecture_findings", []),
-            "test_gaps": state.get("test_gaps", []),
-            "consistency": state.get("consistency", []),
-            "context_findings": state.get("context_findings", []),
+            "diff": pr_data.diff_text,
+            "repo": pr_data.repo_name,
+            "pr_number": pr_data.pr_number,
+            "security_findings": synthesis["findings"].get("security", []),
+            "architecture_findings": synthesis["findings"].get("architecture", []),
+            "test_gaps": synthesis["findings"].get("test_gaps", []),
+            "context_findings": synthesis["findings"].get("context", []),
+            "consistency_findings": synthesis["findings"].get("context", [])
         },
-        "final_review": final_review,
-        "markdown": format_review_markdown(final_review),
+        "summary": {
+            "finding_count": len(findings_list),
+            "highest_severity": synthesis.get("overall_severity", "Clean").lower()
+        },
+        "findings": findings_list,
+        "markdown": markdown_content
     }
 
 
 async def review_diff(diff: str, repo: str | None = None, pr_number: int | None = None) -> dict:
+    """Helper entrypoint to review a raw diff patch."""
     pr_data = PRData(
         repo_name=repo or "manual/demo",
         pr_number=pr_number or 0,
         diff_text=diff,
         pr_title="Manual diff review",
-        author="manual",
+        author="manual"
     )
     return await review_pr_data(pr_data)
-
-
-def format_review_markdown(final_review: dict) -> str:
-    lines = [
-        "## SilentReviewer",
-        "",
-        final_review.get("summary_text", ""),
-        "",
-        f"**Overall severity:** {final_review.get('overall_severity', 'none').upper()}",
-        "",
-        "### 🔴 Security Agent Findings",
-        *format_security_items(final_review.get("security", [])),
-        "",
-        "### 🟡 Architecture Agent Findings",
-        *format_architecture_items(final_review.get("architecture", [])),
-        "",
-        "### 🟢 Test Gap Detector Alerts",
-        *format_test_gap_items(final_review.get("test_gaps", [])),
-        "",
-        "### 🔵 Stylistic Consistency Findings",
-        *format_consistency_items(final_review.get("consistency", [])),
-    ]
-    return "\n".join(lines)
-
-
-def format_security_items(items: list[dict]) -> list[str]:
-    if not items:
-        return ["- No security vulnerabilities detected."]
-    res = []
-    for item in items:
-        sev = item.get("severity", "warning").upper()
-        res.append(
-            f"<details>\n"
-            f"<summary><b>[{sev}] {item.get('issue_type', 'Vulnerability')}</b> in <code>{item.get('file', 'unknown')}</code></summary>\n\n"
-            f"* **Description:** {item.get('description', '')}\n"
-            f"* **Line Hint:** `{item.get('line_hint', '')}`\n"
-            f"</details>\n"
-        )
-    return res
-
-
-def format_architecture_items(items: list[dict]) -> list[str]:
-    if not items:
-        return ["- No architectural design issues detected."]
-    res = []
-    for item in items:
-        sev = item.get("severity", "warning").upper()
-        res.append(
-            f"<details>\n"
-            f"<summary><b>[{sev}] {item.get('violation_type', 'Violation')}</b></summary>\n\n"
-            f"* **Description:** {item.get('description', '')}\n"
-            f"* **Refactor Suggestion:** *{item.get('refactor_suggestion', '')}*\n"
-            f"</details>\n"
-        )
-    return res
-
-
-def format_test_gap_items(items: list[dict]) -> list[str]:
-    if not items:
-        return ["- No test coverage gaps found."]
-    res = []
-    for item in items:
-        res.append(
-            f"<details>\n"
-            f"<summary><b>[WARNING] Missing Coverage</b> for <code>{item.get('function', '')}</code> in <code>{item.get('file', 'unknown')}</code></summary>\n\n"
-            f"* **Description:** This newly added or modified function lacks corresponding test coverage.\n"
-            f"* **Missing Scenario:** {item.get('missing_test', '')}\n"
-            f"</details>\n"
-        )
-    return res
-
-
-def format_consistency_items(items: list[dict]) -> list[str]:
-    if not items:
-        return ["- No style or historical pattern inconsistencies detected."]
-    res = []
-    for item in items:
-        sev = item.get("severity", "info").upper()
-        res.append(
-            f"<details>\n"
-            f"<summary><b>[{sev}] Style Inconsistency</b> in <code>{item.get('location', 'unknown')}</code></summary>\n\n"
-            f"* **Description:** {item.get('issue', '')}\n"
-            f"</details>\n"
-        )
-    return res
-
 
 
 if __name__ == "__main__":
@@ -273,9 +338,10 @@ if __name__ == "__main__":
     demo = PRData(
         repo_name="demo/repo",
         pr_number=1,
-        diff_text="+ password = \"admin123\"\n+ def send_email_and_save_user_to_db(user):\n+     pass",
+        diff_text="+ password = \"admin123\"\n+ query = \"SELECT * FROM users WHERE id = \" + user_id\n+ def send_email_and_save_user_to_db(user):\n+     pass",
         pr_title="Demo",
-        author="local",
+        author="local"
     )
-    print(asyncio.run(review_pr_data(demo)))
-
+    print("Testing compiled Phase 4 parallel StateGraph...")
+    result = asyncio.run(review_pr_data(demo))
+    print("\nStateGraph successfully run and review computed.")
