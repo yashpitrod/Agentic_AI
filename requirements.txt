@@ -11,3 +11,5 @@ requests         # ConceptMap only
 langchain        # optional — only if using LangGraph
 langgraph        # optional
 PyGitHub
+langchain-google-genai
+langchain-anthropic

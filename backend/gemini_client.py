@@ -11,10 +11,9 @@ import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
-
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 DEFAULT_MODEL = "gemini-2.5-flash"
-FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-2.0-flash-lite"]
+FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
 MAX_RETRIES = 3
 CACHE_FILE = ".gemini_cache.json"
 
@@ -192,3 +191,67 @@ async def call_gemini_json_array(prompt: str, system: str, max_tokens: int = 200
         _save_cache()
 
     return parsed_result
+
+
+async def call_gemini_text(prompt: str, system: str = "", max_tokens: int = 500) -> str:
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is not configured.")
+
+    base_model = os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
+    models_to_try = [base_model]
+    for fallback in FALLBACK_MODELS:
+        if fallback not in models_to_try:
+            models_to_try.append(fallback)
+
+    last_exception = None
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        for model in models_to_try:
+            url = GEMINI_API_URL.format(model=model)
+            payload = {
+                "system_instruction": {
+                    "parts": [{"text": system}],
+                },
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": prompt}],
+                    }
+                ],
+                "generationConfig": {
+                    "maxOutputTokens": max_tokens,
+                    "temperature": 0.2,
+                },
+            }
+
+            for attempt in range(MAX_RETRIES + 1):
+                try:
+                    response = await client.post(url, params={"key": api_key}, json=payload)
+
+                    if response.status_code in (403, 404):
+                        break
+
+                    if response.status_code == 429:
+                        if attempt < MAX_RETRIES:
+                            sleep_time = (2 ** attempt) + random.uniform(0.1, 1.0)
+                            await asyncio.sleep(sleep_time)
+                            continue
+                        break
+
+                    if response.is_error:
+                        raise RuntimeError(
+                            f"Gemini API request failed with HTTP {response.status_code}: {response.text[:300]}"
+                        )
+
+                    return _extract_text(response.json()).strip()
+
+                except Exception as exc:
+                    last_exception = exc
+                    if attempt < MAX_RETRIES:
+                        sleep_time = (1.5 ** attempt) + random.uniform(0.1, 0.5)
+                        await asyncio.sleep(sleep_time)
+                    else:
+                        break
+
+    raise last_exception or RuntimeError("All Gemini models failed to generate text.")
