@@ -66,6 +66,25 @@ def fetch_pr_data(repo_name: str, pr_number: int) -> PRData:
         author=pr.user.login
     )
 
+
+def post_pr_comment(repo_name: str, pr_number: int, body: str) -> None:
+    token = os.getenv("GITHUB_TOKEN")
+    if not token:
+        raise ValueError("GITHUB_TOKEN not found in environment variables or .env file.")
+
+    g = Github(token)
+    try:
+        repo = g.get_repo(repo_name)
+        issue = repo.get_issue(number=pr_number)
+        issue.create_comment(body)
+    except GithubException as e:
+        status_code = e.status
+        message = e.data.get("message", str(e))
+        raise ValueError(
+            f"Could not post review comment to '{repo_name}' PR #{pr_number} "
+            f"(Status: {status_code}): {message}"
+        ) from e
+
 if __name__ == "__main__":
     # Small test CLI
     if len(sys.argv) < 3:

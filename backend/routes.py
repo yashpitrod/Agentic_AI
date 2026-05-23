@@ -7,7 +7,8 @@ import os
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from agents.orchestrator import review_diff
+from agents.orchestrator import review_diff, review_pr_data
+from backend.github_fetcher import fetch_pr_data, post_pr_comment
 from backend.schemas import ManualReviewRequest, WebhookAck
 
 router = APIRouter()
@@ -57,12 +58,20 @@ async def github_webhook(
     )
 
     if x_github_event == "pull_request" and action in {"opened", "synchronize", "reopened"}:
-        # Phase 1 only acknowledges the event. Phase 2 will fetch the PR diff and post a review.
+        try:
+            pr_data = fetch_pr_data(repo_name, pr_number)
+            review_result = await review_pr_data(pr_data)
+            post_pr_comment(repo_name, pr_number, review_result["markdown"])
+            print("SilentReviewer final review:", review_result["final_review"])
+        except Exception as exc:
+            print("SilentReviewer review failed:", exc)
+            raise HTTPException(status_code=500, detail=f"Review failed: {exc}") from exc
+
         return WebhookAck(
             status="accepted",
             event=x_github_event,
             action=action,
-            message=f"PR event accepted for {repo_name}#{pr_number}.",
+            message=f"PR review completed for {repo_name}#{pr_number}.",
         )
 
     return WebhookAck(
