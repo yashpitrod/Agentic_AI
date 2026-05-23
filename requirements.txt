@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+anthropic
+python-dotenv
+streamlit
+pydantic
+httpx
+asyncio
+PyMuPDF          # ConceptMap only — PDF extraction
+beautifulsoup4   # ConceptMap only — URL scraping
+requests         # ConceptMap only
+langchain        # optional — only if using LangGraph
+langgraph        # optional
