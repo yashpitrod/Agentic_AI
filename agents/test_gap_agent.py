@@ -10,18 +10,11 @@ from dotenv import load_dotenv
 # Load credentials from .env
 load_dotenv()
 
-# Support both Gemini and Claude so the user has maximum flexibility
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
     _HAS_GEMINI = True
 except ImportError:
     _HAS_GEMINI = False
-
-try:
-    from langchain_anthropic import ChatAnthropic
-    _HAS_CLAUDE = True
-except ImportError:
-    _HAS_CLAUDE = False
 
 
 # --- SECTION 1: PYDANTIC SCHEMAS FOR STRUCTURED OUTPUT ---
@@ -82,14 +75,13 @@ DIFF_USER_PROMPT = """Analyze this raw Pull Request Diff and extract all new or 
 
 def analyze_diff_elements(pr_diff_text: str) -> list[dict]:
     """
-    Takes the raw pull request diff, passes it to the LLM (prefers Gemini/Claude),
+    Takes the raw pull request diff, passes it to Gemini,
     and returns a structured JSON array representing all new or modified functions and classes.
     """
     if not pr_diff_text.strip():
         return []
 
     gemini_key = os.getenv("GEMINI_API_KEY")
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
 
     if gemini_key and _HAS_GEMINI:
         llm = ChatGoogleGenerativeAI(
@@ -97,16 +89,10 @@ def analyze_diff_elements(pr_diff_text: str) -> list[dict]:
             google_api_key=gemini_key, 
             temperature=0.0
         )
-    elif anthropic_key and _HAS_CLAUDE:
-        llm = ChatAnthropic(
-            model="claude-3-5-sonnet-latest", 
-            anthropic_api_key=anthropic_key, 
-            temperature=0.0
-        )
     else:
         raise ValueError(
-            "No active API keys or compatible LLM integration libraries found. "
-            "Please configure either GEMINI_API_KEY or ANTHROPIC_API_KEY in your .env file."
+            "GEMINI_API_KEY or langchain-google-genai is not configured. "
+            "This project uses Gemini for test gap analysis."
         )
 
     structured_llm = llm.with_structured_output(ChangedElementsList)
@@ -125,7 +111,7 @@ def analyze_diff_elements(pr_diff_text: str) -> list[dict]:
         return [element.model_dump() for element in result.elements]
     except Exception as e:
         print(f"[Test Gap Agent] Error during diff element extraction: {e}")
-        return []
+        raise
 
 
 # --- SECTION 3: TEST FILE FETCHER (Helper 2) ---
@@ -204,7 +190,6 @@ def compare_and_find_test_gaps(modified_elements: list[dict], test_files: list[d
         return []
 
     gemini_key = os.getenv("GEMINI_API_KEY")
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
 
     if gemini_key and _HAS_GEMINI:
         print("[Test Gap Agent] Initializing Gemini for test gap comparison...")
@@ -213,15 +198,8 @@ def compare_and_find_test_gaps(modified_elements: list[dict], test_files: list[d
             google_api_key=gemini_key, 
             temperature=0.0
         )
-    elif anthropic_key and _HAS_CLAUDE:
-        print("[Test Gap Agent] Initializing Claude for test gap comparison...")
-        llm = ChatAnthropic(
-            model="claude-3-5-sonnet-latest", 
-            anthropic_api_key=anthropic_key, 
-            temperature=0.0
-        )
     else:
-        raise ValueError("No active API keys found (GEMINI_API_KEY or ANTHROPIC_API_KEY).")
+        raise ValueError("GEMINI_API_KEY or langchain-google-genai is not configured.")
 
     structured_llm = llm.with_structured_output(TestGapsList)
 
@@ -250,7 +228,7 @@ def compare_and_find_test_gaps(modified_elements: list[dict], test_files: list[d
         return [gap.model_dump() for gap in result.gaps]
     except Exception as e:
         print(f"[Test Gap Agent] Error during comparison logic: {e}")
-        return []
+        raise
 
 
 # --- SECTION 5: LANGGRAPH NODE FUNCTION ---

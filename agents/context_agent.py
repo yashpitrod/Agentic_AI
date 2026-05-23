@@ -4,18 +4,11 @@ import os
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
-# Support both Gemini and Claude so the user has maximum flexibility
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
     _HAS_GEMINI = True
 except ImportError:
     _HAS_GEMINI = False
-
-try:
-    from langchain_anthropic import ChatAnthropic
-    _HAS_CLAUDE = True
-except ImportError:
-    _HAS_CLAUDE = False
 
 from backend.history_fetcher import get_historical_codebase_structure
 
@@ -94,9 +87,8 @@ def run_context_agent(state: dict) -> dict:
         print(f"[Context Agent] Error fetching repository history: {e}")
         historical_structure = "Error: Historical codebase structure could not be retrieved."
 
-    # 2. Select and initialize the validated LLM (prefers Gemini as verified, falls back to Anthropic)
+    # 2. Select and initialize Gemini. This project uses GEMINI_API_KEY.
     gemini_key = os.getenv("GEMINI_API_KEY")
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
 
     if gemini_key and _HAS_GEMINI:
         print(f"[Context Agent] Initializing Gemini model for code consistency analysis...")
@@ -105,17 +97,10 @@ def run_context_agent(state: dict) -> dict:
             google_api_key=gemini_key, 
             temperature=0.1
         )
-    elif anthropic_key and _HAS_CLAUDE:
-        print(f"[Context Agent] Initializing Claude model for code consistency analysis...")
-        llm = ChatAnthropic(
-            model="claude-3-5-sonnet-latest", 
-            anthropic_api_key=anthropic_key, 
-            temperature=0.1
-        )
     else:
         raise ValueError(
-            "No active API keys or compatible LLM integration libraries found. "
-            "Please ensure either GEMINI_API_KEY or ANTHROPIC_API_KEY is configured in your .env file."
+            "GEMINI_API_KEY or langchain-google-genai is not configured. "
+            "This project uses Gemini for context analysis."
         )
 
     # 3. Request Structured Output matching our schema
@@ -140,11 +125,7 @@ def run_context_agent(state: dict) -> dict:
         
     except Exception as e:
         print(f"[Context Agent] LLM invocation failed: {e}")
-        findings_json_array = [{
-            "issue": f"Failed to run code consistency checks: {str(e)}",
-            "severity": "info",
-            "location": "system"
-        }]
+        raise
 
     print(f"[Context Agent] Completed review. Found {len(findings_json_array)} stylistic/architectural issues.")
     return {"context_findings": findings_json_array}

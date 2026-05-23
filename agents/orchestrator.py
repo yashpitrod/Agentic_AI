@@ -22,6 +22,7 @@ class GraphState(TypedDict):
     repo_name: str | None
     pr_number: int | None
     agent_results: Annotated[dict, operator.ior]
+    agent_errors: Annotated[dict, operator.ior]
     synthesis_output: dict
 
 # ==========================================
@@ -33,133 +34,137 @@ async def prepare_diff_node(state: GraphState) -> dict:
     print("[Orchestrator] Preparing PR review state...")
     return {
         "agent_results": {},
+        "agent_errors": {},
         "synthesis_output": {}
     }
 
 
+async def _run_with_retry(agent_name: str, call, attempts: int = 2, delay_seconds: float = 1.0):
+    """Run one agent with a small retry budget; raise the last error if all attempts fail."""
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return await call()
+        except Exception as exc:
+            last_error = exc
+            print(f"[Orchestrator] {agent_name} attempt {attempt}/{attempts} failed: {exc}")
+            if attempt < attempts:
+                await asyncio.sleep(delay_seconds)
+    raise last_error or RuntimeError(f"{agent_name} failed")
+
+
 async def security_node(state: GraphState) -> dict:
-    """Security Agent Node - Executes security checks or returns mock fallback."""
+    """Security Agent Node - Executes security checks and skips gracefully on failure."""
     print("[Orchestrator] Running Security Agent...")
     diff = state["pr_diff"]
     try:
-        # Attempt real Gemini review
-        real_findings = await run_security_agent(diff)
-        # Handle case where Gemini client returned error findings
+        real_findings = await _run_with_retry(
+            "Security Agent",
+            lambda: run_security_agent(diff),
+        )
         if real_findings and real_findings[0].get("issue_type") == "security_agent_error":
             raise RuntimeError(real_findings[0].get("description"))
         findings = real_findings
     except Exception as exc:
-        print(f"[Orchestrator] Security Agent fallback to mock due to: {exc}")
-        findings = [
-            {
-                "issue_type": "Hardcoded Secret",
-                "severity": "critical",
-                "file": "main.py",
-                "description": "Hardcoded password 'admin123' detected in code. Use environment variables or configuration files instead.",
-                "line_hint": "+ password = \"admin123\""
-            },
-            {
-                "issue_type": "SQL Injection",
-                "severity": "critical",
-                "file": "main.py",
-                "description": "Potential SQL injection vulnerability. Direct string concatenation in query construction.",
-                "line_hint": "+ query = \"SELECT * FROM users WHERE id = \" + user_id"
-            }
-        ]
+        print(f"[Orchestrator] Security Agent skipped after retries: {exc}")
+        return {
+            "agent_results": {"security": []},
+            "agent_errors": {"security": str(exc)},
+        }
         
     return {
         "agent_results": {
             "security": findings
-        }
+        },
+        "agent_errors": {}
     }
 
 
 async def architecture_node(state: GraphState) -> dict:
-    """Architecture Agent Node - Executes design checks or returns mock fallback."""
+    """Architecture Agent Node - Executes design checks and skips gracefully on failure."""
     print("[Orchestrator] Running Architecture Agent...")
     diff = state["pr_diff"]
     try:
-        # Attempt real Gemini review
-        real_findings = await run_architecture_agent(diff)
+        real_findings = await _run_with_retry(
+            "Architecture Agent",
+            lambda: run_architecture_agent(diff),
+        )
         if real_findings and real_findings[0].get("violation_type") == "architecture_agent_error":
             raise RuntimeError(real_findings[0].get("description"))
         findings = real_findings
     except Exception as exc:
-        print(f"[Orchestrator] Architecture Agent fallback to mock due to: {exc}")
-        findings = [
-            {
-                "violation_type": "SRP Violation",
-                "description": "The function `send_email_and_save_user_to_db` has multiple responsibilities: sending emails and saving users.",
-                "refactor_suggestion": "Split into `send_user_email(user)` and `save_user_to_db(user)`.",
-                "severity": "warning"
-            }
-        ]
+        print(f"[Orchestrator] Architecture Agent skipped after retries: {exc}")
+        return {
+            "agent_results": {"architecture": []},
+            "agent_errors": {"architecture": str(exc)},
+        }
         
     return {
         "agent_results": {
             "architecture": findings
-        }
+        },
+        "agent_errors": {}
     }
 
 
 async def test_gap_node(state: GraphState) -> dict:
-    """Test Gap Agent Node - Analyzes coverage gaps or returns mock fallback."""
+    """Test Gap Agent Node - Analyzes coverage gaps and skips gracefully on failure."""
     print("[Orchestrator] Running Test Gap Agent...")
     try:
-        # Attempt real comparison
-        real_result = await asyncio.to_thread(
-            run_test_gap_agent,
-            {
-                "repo_name": state.get("repo_name") or "demo/repo",
-                "current_diff": state["pr_diff"],
-                "pr_diff_text": state["pr_diff"]
-            }
+        real_result = await _run_with_retry(
+            "Test Gap Agent",
+            lambda: asyncio.to_thread(
+                run_test_gap_agent,
+                {
+                    "repo_name": state.get("repo_name") or "demo/repo",
+                    "current_diff": state["pr_diff"],
+                    "pr_diff_text": state["pr_diff"]
+                }
+            ),
         )
         findings = real_result.get("test_gaps", [])
     except Exception as exc:
-        print(f"[Orchestrator] Test Gap Agent fallback to mock due to: {exc}")
-        findings = [
-            {
-                "function": "send_email_and_save_user_to_db",
-                "file": "main.py",
-                "missing_test": "No test coverage found for the newly added function."
-            }
-        ]
+        print(f"[Orchestrator] Test Gap Agent skipped after retries: {exc}")
+        return {
+            "agent_results": {"test_gaps": []},
+            "agent_errors": {"test_gaps": str(exc)},
+        }
         
     return {
         "agent_results": {
             "test_gaps": findings
-        }
+        },
+        "agent_errors": {}
     }
 
 
 async def context_node(state: GraphState) -> dict:
-    """Context/Consistency Agent Node - Verifies style or returns mock fallback."""
+    """Context/Consistency Agent Node - Verifies style and skips gracefully on failure."""
     print("[Orchestrator] Running Consistency Agent...")
     try:
-        # Attempt real comparison
-        real_result = await asyncio.to_thread(
-            run_context_agent,
-            {
-                "repo_name": state.get("repo_name") or "demo/repo",
-                "current_diff": state["pr_diff"]
-            }
+        real_result = await _run_with_retry(
+            "Context Agent",
+            lambda: asyncio.to_thread(
+                run_context_agent,
+                {
+                    "repo_name": state.get("repo_name") or "demo/repo",
+                    "current_diff": state["pr_diff"]
+                }
+            ),
         )
         findings = real_result.get("context_findings", [])
     except Exception as exc:
-        print(f"[Orchestrator] Consistency Agent fallback to mock due to: {exc}")
-        findings = [
-            {
-                "issue": "Stylistic deviation: new function name matches snake_case but combines actions.",
-                "severity": "info",
-                "location": "send_email_and_save_user_to_db"
-            }
-        ]
+        print(f"[Orchestrator] Context Agent skipped after retries: {exc}")
+        return {
+            "agent_results": {"context": []},
+            "agent_errors": {"context": str(exc)},
+        }
         
     return {
         "agent_results": {
             "context": findings
-        }
+        },
+        "agent_errors": {}
     }
 
 
@@ -273,6 +278,7 @@ async def review_pr_data(pr_data: PRData) -> dict:
         "repo_name": pr_data.repo_name,
         "pr_number": pr_data.pr_number,
         "agent_results": {},
+        "agent_errors": {},
         "synthesis_output": {}
     })
     
@@ -305,11 +311,13 @@ async def review_pr_data(pr_data: PRData) -> dict:
             "architecture_findings": synthesis["findings"].get("architecture", []),
             "test_gaps": synthesis["findings"].get("test_gaps", []),
             "context_findings": synthesis["findings"].get("context", []),
-            "consistency_findings": synthesis["findings"].get("context", [])
+            "consistency_findings": synthesis["findings"].get("context", []),
+            "agent_errors": state.get("agent_errors", {})
         },
         "summary": {
             "finding_count": len(findings_list),
-            "highest_severity": synthesis.get("overall_severity", "Clean").lower()
+            "highest_severity": synthesis.get("overall_severity", "Clean").lower(),
+            "skipped_agents": list(state.get("agent_errors", {}).keys())
         },
         "findings": findings_list,
         "markdown": markdown_content
