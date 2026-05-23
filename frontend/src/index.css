@@ -1,0 +1,110 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+
+
+:root {
+  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  background-color: #f7ebd4; /* Warm Brutalist Paper Background */
+  color: #121212;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f7ebd4;
+  overflow-y: scroll;
+}
+
+/* Custom Neubrutalist Utility Classes */
+.neo-border {
+  border: 4px solid #000000;
+}
+
+.neo-shadow {
+  box-shadow: 4px 4px 0px 0px rgba(0,0,0,1);
+}
+
+.neo-shadow-lg {
+  box-shadow: 8px 8px 0px 0px rgba(0,0,0,1);
+}
+
+.neo-shadow-hover:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px rgba(0,0,0,1);
+}
+
+.neo-shadow-hover:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px 0px rgba(0,0,0,1);
+}
+
+.neo-btn {
+  border: 4px solid #000000;
+  box-shadow: 4px 4px 0px 0px rgba(0,0,0,1);
+  transition: all 0.15s ease-in-out;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.neo-btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px rgba(0,0,0,1);
+}
+
+.neo-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px 0px rgba(0,0,0,1);
+}
+
+.neo-card {
+  background-color: #ffffff;
+  border: 4px solid #000000;
+  box-shadow: 4px 4px 0px 0px rgba(0,0,0,1);
+  padding: 1.5rem;
+  transition: all 0.15s ease-in-out;
+}
+
+.neo-input {
+  border: 4px solid #000000;
+  padding: 0.75rem 1rem;
+  background-color: #ffffff;
+  font-family: inherit;
+  font-weight: 500;
+  outline: none;
+  box-shadow: 2px 2px 0px 0px rgba(0,0,0,1);
+}
+
+.neo-input:focus {
+  box-shadow: 4px 4px 0px 0px rgba(0,0,0,1);
+  background-color: #fffdf5;
+}
+
+.font-mono-brutal {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f7ebd4;
+  border-left: 4px solid #000000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ff5e97; /* Hot pink brutalist scrollbar thumb */
+  border: 3px solid #f7ebd4;
+  border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #e63972;
+}
