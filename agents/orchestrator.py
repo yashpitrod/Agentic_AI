@@ -23,6 +23,7 @@ class GraphState(TypedDict):
     pr_diff: str
     repo_name: str | None
     pr_number: int | None
+    post_comment: bool
     agent_results: Annotated[dict, operator.ior]
     agent_errors: Annotated[dict, operator.ior]
     agent_metrics: Annotated[dict, operator.ior]
@@ -284,7 +285,7 @@ async def commenter_node(state: GraphState) -> dict:
     # Post comment if live repo name and pr_number are supplied
     repo = state.get("repo_name")
     pr_num = state.get("pr_number")
-    if repo and pr_num and os.getenv("GITHUB_TOKEN"):
+    if state.get("post_comment") and repo and pr_num and os.getenv("GITHUB_TOKEN"):
         try:
             logger.info("Posting GitHub PR comment to %s#%s...", repo, pr_num)
             await post_github_comment(repo, pr_num, markdown)
@@ -341,6 +342,7 @@ async def review_pr_data(pr_data: PRData) -> dict:
         "pr_diff": pr_data.diff_text,
         "repo_name": pr_data.repo_name,
         "pr_number": pr_data.pr_number,
+        "post_comment": pr_data.post_comment,
         "agent_results": {},
         "agent_errors": {},
         "agent_metrics": {},
@@ -407,6 +409,7 @@ async def review_diff(diff: str, repo: str | None = None, pr_number: int | None 
         diff_text=diff,
         pr_title="Manual diff review",
         author="manual",
+        post_comment=False,
     )
     return await review_pr_data(pr_data)
 

@@ -10,12 +10,19 @@ class PRData(BaseModel):
     diff_text: str
     pr_title: str
     author: str
+    post_comment: bool = False
 
 
 class ManualReviewRequest(BaseModel):
     diff: str = Field(..., min_length=1, description="Unified git diff text to review.")
     repo: str | None = Field(default=None, description="Optional owner/repo name.")
     pr_number: int | None = Field(default=None, description="Optional pull request number.")
+
+
+class PRReviewRequest(BaseModel):
+    repo: str = Field(..., min_length=3, description="GitHub repository in owner/repo format.")
+    pr_number: int = Field(..., ge=1, description="GitHub pull request number.")
+    post_comment: bool = Field(default=False, description="Post the generated review as a GitHub PR comment.")
 
 
 class WebhookAck(BaseModel):
