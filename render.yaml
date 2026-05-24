@@ -12,7 +12,7 @@ services:
       - key: GEMINI_MODEL
         value: gemini-2.0-flash
       - key: REVIEWS_DB_PATH
-        value: /var/data/reviews.db
+        value: /tmp/reviews.db
       - key: GEMINI_API_KEY
         sync: false
       - key: GITHUB_TOKEN
@@ -21,7 +21,3 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
-    disk:
-      name: review-data
-      mountPath: /var/data
-      sizeGB: 1
