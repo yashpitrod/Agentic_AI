@@ -57,6 +57,25 @@ def _extract_text(response_json: dict[str, Any]) -> str:
     return "".join(part.get("text", "") for part in parts)
 
 
+def _repair_json(raw: str) -> str:
+    """Attempt to fix common Gemini truncation issues (unclosed strings, arrays, objects)."""
+    text = raw.strip()
+    # Count open/close brackets
+    open_brackets = text.count('[') - text.count(']')
+    open_braces = text.count('{') - text.count('}')
+    open_quotes = text.count('"') % 2
+
+    # Close an unterminated string
+    if open_quotes:
+        text += '"'
+
+    # Close any open braces/brackets
+    text += '}' * max(0, open_braces)
+    text += ']' * max(0, open_brackets)
+
+    return text
+
+
 def parse_json_array(raw_text: str) -> list[dict]:
     # Strip markdown code fences if Gemini wraps the response
     cleaned = raw_text.strip()
@@ -66,7 +85,15 @@ def parse_json_array(raw_text: str) -> list[dict]:
         cleaned = cleaned.removeprefix("```").strip()
     if cleaned.endswith("```"):
         cleaned = cleaned.removesuffix("```").strip()
-    parsed = json.loads(cleaned or "[]")
+
+    try:
+        parsed = json.loads(cleaned or "[]")
+    except json.JSONDecodeError:
+        # Try to repair truncated JSON before giving up
+        logger.warning("Initial JSON parse failed, attempting repair...")
+        repaired = _repair_json(cleaned)
+        parsed = json.loads(repaired)
+
     if not isinstance(parsed, list):
         raise ValueError("Gemini response was not a JSON array.")
     return parsed
@@ -78,7 +105,7 @@ def _get_cache_key(model: str, system: str, prompt: str) -> str:
     return hasher.hexdigest()
 
 
-async def call_gemini_json_array(prompt: str, system: str, max_tokens: int = 2000) -> list[dict]:
+async def call_gemini_json_array(prompt: str, system: str, max_tokens: int = 4096) -> list[dict]:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY is not configured.")

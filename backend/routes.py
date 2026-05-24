@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -7,10 +8,11 @@ import logging
 import os
 
 from fastapi import APIRouter, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 
 from agents.orchestrator import review_diff, review_pr_data
 from backend.github_fetcher import fetch_pr_data
-from backend.review_store import list_reviews, save_review
+from backend.review_store import list_reviews, save_review, get_review_by_id
 from backend.schemas import ManualReviewRequest, PRReviewRequest, ReviewListResponse, WebhookAck
 
 logger = logging.getLogger(__name__)
@@ -145,10 +147,75 @@ async def review_pull_request(request: PRReviewRequest):
         raise HTTPException(status_code=500, detail=f"Review failed: {exc}") from exc
 
 
+@router.post("/review-pr/stream")
+async def review_pr_stream(request: PRReviewRequest):
+    """SSE streaming endpoint that emits real-time progress events during PR review."""
+    if "/" not in request.repo:
+        raise HTTPException(status_code=400, detail="repo must be in owner/repo format.")
+
+    async def event_generator():
+        # Stage 1: Fetching diff
+        yield f"data: {json.dumps({'stage': 'fetching_diff', 'status': 'running', 'message': 'Fetching PR diff from GitHub...'})}\n\n"
+        try:
+            pr_data = await fetch_pr_data(request.repo, request.pr_number)
+            pr_data.post_comment = request.post_comment
+        except ValueError as exc:
+            yield f"data: {json.dumps({'stage': 'fetching_diff', 'status': 'error', 'message': str(exc)})}\n\n"
+            return
+        except Exception as exc:
+            yield f"data: {json.dumps({'stage': 'fetching_diff', 'status': 'error', 'message': str(exc)})}\n\n"
+            return
+
+        yield f"data: {json.dumps({'stage': 'fetching_diff', 'status': 'done', 'message': 'PR diff fetched successfully'})}\n\n"
+
+        # Stage 2: Signal that all agents are starting (they run in parallel)
+        yield f"data: {json.dumps({'stage': 'security', 'status': 'running', 'message': 'Running Security Agent...'})}\n\n"
+        yield f"data: {json.dumps({'stage': 'architecture', 'status': 'running', 'message': 'Running Architecture Agent...'})}\n\n"
+        yield f"data: {json.dumps({'stage': 'test_gaps', 'status': 'running', 'message': 'Checking test gaps...'})}\n\n"
+        yield f"data: {json.dumps({'stage': 'consistency', 'status': 'running', 'message': 'Running Consistency Agent...'})}\n\n"
+
+        # Stage 3: Run the full pipeline (agents execute in parallel inside)
+        try:
+            review_result = await review_pr_data(pr_data)
+        except Exception as exc:
+            logger.error("Stream review failed for %s#%s: %s", request.repo, request.pr_number, exc, exc_info=True)
+            yield f"data: {json.dumps({'stage': 'pipeline', 'status': 'error', 'message': f'Review failed: {exc}'})}\n\n"
+            return
+
+        # Stage 4: Mark agents as done based on metrics
+        metrics = review_result.get("state", {}).get("agent_metrics", {})
+        for agent_key in ["security", "architecture", "test_gaps", "context"]:
+            stage_name = "consistency" if agent_key == "context" else agent_key
+            agent_metric = metrics.get(agent_key, {})
+            agent_status = "done" if agent_metric.get("status") == "completed" else "skipped"
+            agent_label = agent_key.replace("_", " ").title()
+            event_data = json.dumps({"stage": stage_name, "status": agent_status, "message": f"{agent_label} Agent finished"})
+            yield f"data: {event_data}\n\n"
+
+        # Stage 5: Save and broadcast
+        saved = await save_review(review_result)
+        await manager.broadcast(saved)
+
+        # Stage 6: Complete — send the review ID and full data
+        complete_data = json.dumps({"stage": "complete", "status": "done", "review_id": saved.get("id", ""), "message": "Review complete"})
+        yield f"data: {complete_data}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @router.get("/reviews", response_model=ReviewListResponse)
 async def get_reviews():
     reviews = await list_reviews()
     return ReviewListResponse(count=len(reviews), reviews=reviews)
+
+
+@router.get("/reviews/{review_id}")
+async def get_review(review_id: str):
+    """Fetch a single review by ID."""
+    review = await get_review_by_id(review_id)
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found.")
+    return review
 
 
 @router.websocket("/ws/reviews")

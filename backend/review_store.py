@@ -51,3 +51,15 @@ async def list_reviews() -> list[dict]:
         )
         rows = await cursor.fetchall()
     return [json.loads(row[0]) for row in rows]
+
+
+async def get_review_by_id(review_id: str) -> dict | None:
+    # Retrieve a single review by its unique ID
+    async with aiosqlite.connect(_db_path) as db:
+        cursor = await db.execute(
+            "SELECT payload FROM reviews WHERE id = ?", (review_id,)
+        )
+        row = await cursor.fetchone()
+    if row:
+        return json.loads(row[0])
+    return None
