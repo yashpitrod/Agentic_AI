@@ -35,17 +35,20 @@ SYSTEM_PROMPT = (
     "You are a strict automated software architecture and code style reviewer. "
     "Review a new incoming Pull Request Diff by comparing it to the historical patterns "
     "of the codebase to identify stylistic, naming, or architectural inconsistencies.\n\n"
+    "If the historical structure is unavailable, empty, or errored, perform a rigorous fallback review of the PR "
+    "against standard modern industry conventions (e.g., PEP 8 for Python, standard casing, error handling hygiene, "
+    "and clean code principles).\n\n"
     "HISTORICAL CODEBASE STRUCTURE:\n{historical_structure}"
 )
 
 USER_PROMPT = (
     "CURRENT PR DIFF:\n{current_diff}\n\n"
     "Instructions:\n"
-    "1. Naming Conventions: Identify functions/classes/variables/files that violate established naming patterns.\n"
-    "2. Error Handling & Architecture: Note deviations from historical error handling patterns.\n"
-    "3. Third-Party Imports: Flag unexpected packages not historically present.\n"
-    "4. General Structure: Identify deviations in architecture or module layout.\n\n"
-    "Return a JSON array of findings using the provided schema. If none, return empty array."
+    "1. Naming Conventions: Identify functions/classes/variables/files that violate established casing or naming patterns (like camelCase vs snake_case, short variable names, inconsistent names).\n"
+    "2. Error Handling & Architecture: Devise strict reviews against robust error handling, raw exceptions, and missing try-except blocks in the diff.\n"
+    "3. Third-Party Imports: Flag unexpected package imports or unusual module additions.\n"
+    "4. General Structure: Identify general clean code violations, duplicated logic, or poorly structured modules in the diff.\n\n"
+    "Return a JSON array of findings using the provided schema. If none are found, return an empty array."
 )
 
 

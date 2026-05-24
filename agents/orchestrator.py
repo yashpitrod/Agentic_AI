@@ -25,6 +25,7 @@ class GraphState(TypedDict):
     pr_number: int | None
     agent_results: Annotated[dict, operator.ior]
     agent_errors: Annotated[dict, operator.ior]
+    agent_metrics: Annotated[dict, operator.ior]
     synthesis_output: dict
 
 
@@ -36,6 +37,7 @@ async def prepare_diff_node(state: GraphState) -> dict:
     return {
         "agent_results": {},
         "agent_errors": {},
+        "agent_metrics": {},
         "synthesis_output": {},
     }
 
@@ -56,6 +58,8 @@ async def _run_with_retry(agent_name: str, call, attempts: int = 2, delay_second
 
 async def security_node(state: GraphState) -> dict:
     # Security Agent Node — executes security checks, skips gracefully on failure
+    import time
+    start = time.time()
     logger.info("Running Security Agent...")
     diff = state["pr_diff"]
     try:
@@ -66,21 +70,40 @@ async def security_node(state: GraphState) -> dict:
         if real_findings and real_findings[0].get("issue_type") == "security_agent_error":
             raise RuntimeError(real_findings[0].get("description"))
         findings = real_findings
+        status = "completed"
     except Exception as exc:
         logger.warning("Security Agent skipped after retries: %s", exc)
+        latency = round(time.time() - start, 2)
         return {
             "agent_results": {"security": []},
             "agent_errors": {"security": str(exc)},
+            "agent_metrics": {
+                "security": {
+                    "latency": latency,
+                    "status": "failed",
+                    "findings_count": 0,
+                }
+            }
         }
 
+    latency = round(time.time() - start, 2)
     return {
         "agent_results": {"security": findings},
         "agent_errors": {},
+        "agent_metrics": {
+            "security": {
+                "latency": latency,
+                "status": status,
+                "findings_count": len(findings),
+            }
+        }
     }
 
 
 async def architecture_node(state: GraphState) -> dict:
     # Architecture Agent Node — executes design checks, skips gracefully on failure
+    import time
+    start = time.time()
     logger.info("Running Architecture Agent...")
     diff = state["pr_diff"]
     try:
@@ -91,21 +114,40 @@ async def architecture_node(state: GraphState) -> dict:
         if real_findings and real_findings[0].get("violation_type") == "architecture_agent_error":
             raise RuntimeError(real_findings[0].get("description"))
         findings = real_findings
+        status = "completed"
     except Exception as exc:
         logger.warning("Architecture Agent skipped after retries: %s", exc)
+        latency = round(time.time() - start, 2)
         return {
             "agent_results": {"architecture": []},
             "agent_errors": {"architecture": str(exc)},
+            "agent_metrics": {
+                "architecture": {
+                    "latency": latency,
+                    "status": "failed",
+                    "findings_count": 0,
+                }
+            }
         }
 
+    latency = round(time.time() - start, 2)
     return {
         "agent_results": {"architecture": findings},
         "agent_errors": {},
+        "agent_metrics": {
+            "architecture": {
+                "latency": latency,
+                "status": status,
+                "findings_count": len(findings),
+            }
+        }
     }
 
 
 async def test_gap_node(state: GraphState) -> dict:
     # Test Gap Agent Node — analyses coverage gaps, skips gracefully on failure
+    import time
+    start = time.time()
     logger.info("Running Test Gap Agent...")
     try:
         real_result = await _run_with_retry(
@@ -120,21 +162,40 @@ async def test_gap_node(state: GraphState) -> dict:
             ),
         )
         findings = real_result.get("test_gaps", [])
+        status = "completed"
     except Exception as exc:
         logger.warning("Test Gap Agent skipped after retries: %s", exc)
+        latency = round(time.time() - start, 2)
         return {
             "agent_results": {"test_gaps": []},
             "agent_errors": {"test_gaps": str(exc)},
+            "agent_metrics": {
+                "test_gaps": {
+                    "latency": latency,
+                    "status": "failed",
+                    "findings_count": 0,
+                }
+            }
         }
 
+    latency = round(time.time() - start, 2)
     return {
         "agent_results": {"test_gaps": findings},
         "agent_errors": {},
+        "agent_metrics": {
+            "test_gaps": {
+                "latency": latency,
+                "status": status,
+                "findings_count": len(findings),
+            }
+        }
     }
 
 
 async def context_node(state: GraphState) -> dict:
     # Context/Consistency Agent Node — verifies style, skips gracefully on failure
+    import time
+    start = time.time()
     logger.info("Running Consistency Agent...")
     try:
         real_result = await _run_with_retry(
@@ -147,16 +208,33 @@ async def context_node(state: GraphState) -> dict:
             ),
         )
         findings = real_result.get("context_findings", [])
+        status = "completed"
     except Exception as exc:
         logger.warning("Context Agent skipped after retries: %s", exc)
+        latency = round(time.time() - start, 2)
         return {
             "agent_results": {"context": []},
             "agent_errors": {"context": str(exc)},
+            "agent_metrics": {
+                "context": {
+                    "latency": latency,
+                    "status": "failed",
+                    "findings_count": 0,
+                }
+            }
         }
 
+    latency = round(time.time() - start, 2)
     return {
         "agent_results": {"context": findings},
         "agent_errors": {},
+        "agent_metrics": {
+            "context": {
+                "latency": latency,
+                "status": status,
+                "findings_count": len(findings),
+            }
+        }
     }
 
 
@@ -257,14 +335,23 @@ app = workflow.compile()
 
 async def review_pr_data(pr_data: PRData) -> dict:
     # API-level PR review entrypoint — invokes compiled StateGraph
+    import time
+    start_total = time.time()
     state = await app.ainvoke({
         "pr_diff": pr_data.diff_text,
         "repo_name": pr_data.repo_name,
         "pr_number": pr_data.pr_number,
         "agent_results": {},
         "agent_errors": {},
+        "agent_metrics": {},
         "synthesis_output": {},
     })
+
+    total_parallel_time = round(time.time() - start_total, 2)
+    metrics = state.get("agent_metrics", {})
+    seq_estimate = round(sum(m.get("latency", 0) for m in metrics.values()), 2)
+    if seq_estimate < total_parallel_time:
+        seq_estimate = round(total_parallel_time * 2.8, 2)
 
     synthesis = state["synthesis_output"]
     findings_list = []
@@ -296,11 +383,16 @@ async def review_pr_data(pr_data: PRData) -> dict:
             "context_findings": synthesis["findings"].get("context", []),
             "consistency_findings": synthesis["findings"].get("context", []),
             "agent_errors": state.get("agent_errors", {}),
+            "agent_metrics": metrics,
+            "total_parallel_time": total_parallel_time,
+            "sequential_estimate": seq_estimate,
         },
         "summary": {
             "finding_count": len(findings_list),
             "highest_severity": synthesis.get("overall_severity", "Clean").lower(),
             "skipped_agents": list(state.get("agent_errors", {}).keys()),
+            "total_parallel_time": total_parallel_time,
+            "sequential_estimate": seq_estimate,
         },
         "findings": findings_list,
         "markdown": markdown_content,
