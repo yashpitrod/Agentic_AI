@@ -8,3 +8,4 @@ dist/
 venv/
 *.pdf        # don't commit uploaded test docs
 .gemini_cache.json
+reviews.db

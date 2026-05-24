@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -10,12 +11,15 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from agents.orchestrator import review_diff, review_pr_data
 from backend.github_fetcher import fetch_pr_data
 from backend.review_store import list_reviews, save_review
-from backend.schemas import ManualReviewRequest, WebhookAck
+from backend.schemas import ManualReviewRequest, ReviewListResponse, WebhookAck
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
 def verify_github_signature(body: bytes, signature_header: str | None) -> None:
+    # Validate the HMAC-SHA256 signature from the X-Hub-Signature-256 header
     webhook_secret = os.getenv("GITHUB_WEBHOOK_SECRET")
     if not webhook_secret:
         raise HTTPException(
@@ -53,19 +57,19 @@ async def github_webhook(
     repo_name = payload.get("repository", {}).get("full_name")
     pr_number = payload.get("pull_request", {}).get("number")
 
-    print(
-        "GitHub webhook received:",
-        {"event": x_github_event, "action": action, "repo": repo_name, "pr_number": pr_number},
+    logger.info(
+        "GitHub webhook received: event=%s action=%s repo=%s pr=%s",
+        x_github_event, action, repo_name, pr_number,
     )
 
     if x_github_event == "pull_request" and action in {"opened", "synchronize", "reopened"}:
         try:
-            pr_data = fetch_pr_data(repo_name, pr_number)
+            pr_data = await fetch_pr_data(repo_name, pr_number)
             review_result = await review_pr_data(pr_data)
-            save_review(review_result)
-            print("SilentReviewer review summary:", review_result["summary"])
+            await save_review(review_result)
+            logger.info("Review completed — severity=%s", review_result.get("summary", {}).get("highest_severity"))
         except Exception as exc:
-            print("SilentReviewer review failed:", exc)
+            logger.error("Review failed for %s#%s: %s", repo_name, pr_number, exc, exc_info=True)
             raise HTTPException(status_code=500, detail=f"Review failed: {exc}") from exc
 
         return WebhookAck(
@@ -79,7 +83,7 @@ async def github_webhook(
         status="ignored",
         event=x_github_event,
         action=action,
-        message="Event received but not handled by Phase 1.",
+        message="Event received but not handled.",
     )
 
 
@@ -90,12 +94,10 @@ async def manual_review(request: ManualReviewRequest):
         repo=request.repo,
         pr_number=request.pr_number,
     )
-    return save_review(review_result)
+    return await save_review(review_result)
 
 
-@router.get("/reviews")
+@router.get("/reviews", response_model=ReviewListResponse)
 async def get_reviews():
-    return {
-        "count": len(list_reviews()),
-        "reviews": list_reviews(),
-    }
+    reviews = await list_reviews()
+    return ReviewListResponse(count=len(reviews), reviews=reviews)

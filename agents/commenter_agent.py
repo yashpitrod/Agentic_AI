@@ -1,30 +1,18 @@
 from __future__ import annotations
 
 import html
+import logging
 import os
 import sys
 
-import requests
-from dotenv import load_dotenv
+import httpx
 
-load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 def format_markdown_review(synthesis_json: dict) -> str:
-    """
-    Build GitHub-flavored markdown for the final SilentReviewer PR comment.
-
-    Expected input shape:
-    {
-        "overall_severity": "Critical",
-        "findings": {
-            "security": [...],
-            "architecture": [...],
-            "test_gaps": [...],
-            "context": [...]
-        }
-    }
-    """
+    # Build GitHub-flavored markdown for the final SilentReviewer PR comment
+    # Expected input: { "overall_severity": "...", "findings": { "security": [...], ... } }
     severity = str(synthesis_json.get("overall_severity") or "Clean").strip()
     findings = synthesis_json.get("findings") or {}
 
@@ -58,13 +46,11 @@ def format_markdown_review(synthesis_json: dict) -> str:
         items = findings.get(key) or []
         issue_word = "issue" if len(items) == 1 else "issues"
 
-        markdown_lines.extend(
-            [
-                "<details>",
-                f"<summary>{icon} {title} ({len(items)} {issue_word})</summary>",
-                "",
-            ]
-        )
+        markdown_lines.extend([
+            "<details>",
+            f"<summary>{icon} {title} ({len(items)} {issue_word})</summary>",
+            "",
+        ])
 
         if not items:
             markdown_lines.append("- No findings.")
@@ -113,13 +99,8 @@ def format_markdown_review(synthesis_json: dict) -> str:
     return "\n".join(markdown_lines).rstrip() + "\n"
 
 
-def post_github_comment(repo_name: str, pr_number: int, comment_body: str) -> dict:
-    """
-    Post the review markdown to a GitHub Pull Request using Issue Comments API.
-
-    Pull requests are issues in GitHub's REST API, so the correct endpoint is:
-    POST /repos/{owner}/{repo}/issues/{issue_number}/comments
-    """
+async def post_github_comment(repo_name: str, pr_number: int, comment_body: str) -> dict:
+    # Post the review markdown to a GitHub PR using the Issue Comments API (async)
     token = os.getenv("GITHUB_TOKEN")
     if not token:
         raise ValueError("GITHUB_TOKEN not found in environment variables.")
@@ -128,28 +109,24 @@ def post_github_comment(repo_name: str, pr_number: int, comment_body: str) -> di
     if not comment_body.strip():
         raise ValueError("comment_body cannot be empty.")
 
-    response = requests.post(
-        f"https://api.github.com/repos/{repo_name}/issues/{pr_number}/comments",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "SilentReviewer",
-        },
-        json={"body": comment_body},
-        timeout=20,
-    )
-
-    try:
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"https://api.github.com/repos/{repo_name}/issues/{pr_number}/comments",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "SilentReviewer",
+            },
+            json={"body": comment_body},
+        )
         response.raise_for_status()
-    except requests.HTTPError as exc:
-        raise ValueError(
-            f"Failed to post GitHub comment to {repo_name}#{pr_number}: "
-            f"{response.status_code} {response.text}"
-        ) from exc
 
+    logger.info("Posted review comment to %s#%d", repo_name, pr_number)
     return response.json()
 
+
+# -- Local test block --
 
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
@@ -171,8 +148,8 @@ if __name__ == "__main__":
                 {
                     "violation_type": "SRP Violation",
                     "severity": "warning",
-                    "description": "One function is handling email and database persistence together.",
-                    "refactor_suggestion": "Split the work into focused service functions.",
+                    "description": "One function handles email and database persistence together.",
+                    "refactor_suggestion": "Split into focused service functions.",
                 }
             ],
             "test_gaps": [
@@ -190,9 +167,10 @@ if __name__ == "__main__":
     print(markdown)
 
     if len(sys.argv) >= 3:
+        import asyncio
         repo_arg = sys.argv[1]
         pr_arg = int(sys.argv[2])
-        result = post_github_comment(repo_arg, pr_arg, markdown)
-        print(f"Posted comment: {result.get('html_url', '[no html_url returned]')}")
+        result = asyncio.run(post_github_comment(repo_arg, pr_arg, markdown))
+        print(f"Posted comment: {result.get('html_url', '[no url]')}")
     else:
-        print("To post this dummy comment, run: python agents/commenter_agent.py <owner/repo> <pr_number>")
+        print("To post: python agents/commenter_agent.py <owner/repo> <pr_number>")

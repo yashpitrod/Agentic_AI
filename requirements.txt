@@ -1,15 +1,12 @@
-fastapi
-uvicorn
-python-dotenv
-streamlit
-pydantic
-httpx
-asyncio
-PyMuPDF          # ConceptMap only — PDF extraction
-beautifulsoup4   # ConceptMap only — URL scraping
-requests         # ConceptMap only
-langchain        # optional — only if using LangGraph
-langgraph        # optional
-PyGitHub
-langchain-google-genai
-langchain-anthropic
+fastapi==0.115.12
+uvicorn==0.34.3
+python-dotenv==1.1.0
+pydantic==2.11.3
+httpx==0.28.1
+langgraph==0.4.1
+langchain==0.3.25
+langchain-core==0.3.58
+langchain-google-genai==2.1.4
+PyGitHub==2.6.0
+requests==2.32.3
+aiosqlite==0.21.0

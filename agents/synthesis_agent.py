@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from backend.gemini_client import call_gemini_text
+
+logger = logging.getLogger(__name__)
 
 SEVERITY_SCORE = {
     "none": -1,
@@ -25,6 +28,7 @@ def normalize_severity(value: str | None) -> str:
 
 
 def calculate_overall_severity(*finding_groups: list[dict]) -> str:
+    # Walk all findings and return the highest severity label
     overall = "none"
     for group in finding_groups:
         for finding in group:
@@ -35,6 +39,7 @@ def calculate_overall_severity(*finding_groups: list[dict]) -> str:
 
 
 async def generate_summary_text(review: dict) -> str:
+    # Ask Gemini for a 3-4 line human-readable summary
     system = (
         "You are SilentReviewer, a concise AI pull request reviewer. "
         "Generate a human-readable 3-4 line summary for the top of a GitHub PR comment."
@@ -47,6 +52,7 @@ async def generate_summary_text(review: dict) -> str:
     try:
         return await call_gemini_text(prompt=prompt, system=system, max_tokens=300)
     except Exception as exc:
+        logger.warning("Gemini summary generation failed: %s", exc)
         return (
             f"SilentReviewer completed the review. Overall severity: {review['overall_severity']}. "
             f"Gemini summary generation failed: {exc}"
@@ -59,6 +65,7 @@ async def synthesize_findings(
     test_gaps: list[dict],
     consistency: list[dict],
 ) -> dict:
+    # Aggregate findings from all agents into a single synthesis dict
     review = {
         "overall_severity": calculate_overall_severity(
             security,

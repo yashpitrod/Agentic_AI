@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import os
+
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -12,150 +14,110 @@ except ImportError:
 
 from backend.history_fetcher import get_historical_codebase_structure
 
-# --- SECTION 1: PYDANTIC SCHEMAS FOR STRUCTURED OUTPUT ---
+logger = logging.getLogger(__name__)
+
+
+# -- Pydantic schemas for structured LLM output --
 
 class ContextFinding(BaseModel):
-    issue: str = Field(
-        ..., 
-        description="Detailed description of the naming convention, error handling, or structural inconsistency found."
-    )
-    severity: str = Field(
-        ..., 
-        description="Severity of the issue. Must be either 'warning' or 'info'."
-    )
-    location: str = Field(
-        ..., 
-        description="Location of the issue (e.g., function name, class name, or line number)."
-    )
+    issue: str = Field(..., description="Description of the naming/error-handling/structural inconsistency.")
+    severity: str = Field(..., description="Severity: 'warning' or 'info'.")
+    location: str = Field(..., description="Location of the issue (function, class, or line).")
+
 
 class ContextFindingsList(BaseModel):
-    findings: list[ContextFinding] = Field(
-        default=[], 
-        description="A list of architectural or stylistic findings."
-    )
+    findings: list[ContextFinding] = Field(default=[], description="List of stylistic/architectural findings.")
 
-# --- SECTION 2: SYSTEM AND USER PROMPT DEFINITION ---
 
-SYSTEM_PROMPT = """You are a strict automated software architecture and code style reviewer.
-Your objective is to review a new incoming Pull Request Diff by comparing it to the historical patterns of the codebase to identify stylistic, naming, or architectural inconsistencies.
+# -- Prompt definitions --
 
-HISTORICAL CODEBASE STRUCTURE:
-{historical_structure}
-"""
+SYSTEM_PROMPT = (
+    "You are a strict automated software architecture and code style reviewer. "
+    "Review a new incoming Pull Request Diff by comparing it to the historical patterns "
+    "of the codebase to identify stylistic, naming, or architectural inconsistencies.\n\n"
+    "HISTORICAL CODEBASE STRUCTURE:\n{historical_structure}"
+)
 
-USER_PROMPT = """CURRENT PR DIFF:
-{current_diff}
+USER_PROMPT = (
+    "CURRENT PR DIFF:\n{current_diff}\n\n"
+    "Instructions:\n"
+    "1. Naming Conventions: Identify functions/classes/variables/files that violate established naming patterns.\n"
+    "2. Error Handling & Architecture: Note deviations from historical error handling patterns.\n"
+    "3. Third-Party Imports: Flag unexpected packages not historically present.\n"
+    "4. General Structure: Identify deviations in architecture or module layout.\n\n"
+    "Return a JSON array of findings using the provided schema. If none, return empty array."
+)
 
-Instructions:
-1. **Naming Conventions**: Identify new functions, classes, variables, or files that violate the established naming patterns seen in the historical codebase structure.
-2. **Error Handling & Architecture**: Note if the PR introduces error handling patterns, libraries, or imports that deviate from established historical practices.
-3. **Third-Party Imports**: Flag if the PR introduces unexpected packages that aren't historically present or organized.
-4. **General Structure**: Identify deviations in architecture or module layout.
 
-Analyze the diff carefully. You must structure your output strictly as a JSON array of findings using the provided schema. If no inconsistencies are found, return an empty array.
-"""
+# -- LangGraph node function --
 
-# --- SECTION 3: LANGGRAPH NODE FUNCTION ---
-
-def run_context_agent(state: dict) -> dict:
-    """
-    LangGraph node function that extracts PR info from state, fetches repository
-    history patterns, runs a code consistency check using the LLM,
-    and returns context findings.
-    
-    Args:
-        state (dict): State dictionary containing 'repo_name' and 'current_diff'
-        
-    Returns:
-        dict: State update dictionary containing {"context_findings": <list_of_findings>}
-    """
+async def run_context_agent(state: dict) -> dict:
+    # Fetch historical patterns and run consistency check via Gemini
     repo_name = state.get("repo_name")
     current_diff = state.get("current_diff", "")
 
     if not repo_name:
-        print("[Context Agent] No 'repo_name' found in state. Skipping execution.")
-        return {"context_findings": []}
-    
-    if not current_diff:
-        print("[Context Agent] No 'current_diff' found in state. Returning empty findings.")
+        logger.warning("No 'repo_name' in state. Skipping context analysis.")
         return {"context_findings": []}
 
-    # 1. Fetch the compiled historical codebase structure
+    if not current_diff:
+        logger.warning("No 'current_diff' in state. Returning empty findings.")
+        return {"context_findings": []}
+
+    # 1. Fetch compiled historical codebase structure (now async)
     try:
-        historical_structure = get_historical_codebase_structure(repo_name, limit=15)
+        historical_structure = await get_historical_codebase_structure(repo_name, limit=15)
     except Exception as e:
-        print(f"[Context Agent] Error fetching repository history: {e}")
+        logger.error("Error fetching repository history: %s", e)
         historical_structure = "Error: Historical codebase structure could not be retrieved."
 
-    # 2. Select and initialize Gemini. This project uses GEMINI_API_KEY.
+    # 2. Initialise Gemini
     gemini_key = os.getenv("GEMINI_API_KEY")
+    if not (gemini_key and _HAS_GEMINI):
+        raise ValueError("GEMINI_API_KEY or langchain-google-genai is not configured.")
 
-    if gemini_key and _HAS_GEMINI:
-        print(f"[Context Agent] Initializing Gemini model for code consistency analysis...")
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash", 
-            google_api_key=gemini_key, 
-            temperature=0.1
-        )
-    else:
-        raise ValueError(
-            "GEMINI_API_KEY or langchain-google-genai is not configured. "
-            "This project uses Gemini for context analysis."
-        )
-
-    # 3. Request Structured Output matching our schema
+    logger.info("Initialising Gemini for code consistency analysis...")
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=gemini_key, temperature=0.1)
     structured_llm = llm.with_structured_output(ContextFindingsList)
 
-    # 4. Generate structured findings using system and user prompt format (required for Gemini compatibility)
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
-        ("user", USER_PROMPT)
-    ])
-    
+    # 3. Build prompt chain and invoke
+    prompt = ChatPromptTemplate.from_messages([("system", SYSTEM_PROMPT), ("user", USER_PROMPT)])
     chain = prompt | structured_llm
 
     try:
         result: ContextFindingsList = chain.invoke({
             "historical_structure": historical_structure,
-            "current_diff": current_diff
+            "current_diff": current_diff,
         })
-        
-        # Serialize Pydantic findings list to the requested [{ "issue": "...", ... }] JSON array format
         findings_json_array = [finding.model_dump() for finding in result.findings]
-        
     except Exception as e:
-        print(f"[Context Agent] LLM invocation failed: {e}")
+        logger.error("LLM invocation failed: %s", e)
         raise
 
-    print(f"[Context Agent] Completed review. Found {len(findings_json_array)} stylistic/architectural issues.")
+    logger.info("Context analysis completed. Found %d issues.", len(findings_json_array))
     return {"context_findings": findings_json_array}
 
-# --- SECTION 4: LOCAL RUNNABLE TEST BLOCK ---
+
+# -- Local test block --
 
 if __name__ == "__main__":
-    # Test script locally with dummy diff to verify the agent works
-    print("Testing Context Agent locally...")
-    
+    import asyncio
+    logging.basicConfig(level=logging.INFO)
+
     test_state = {
         "repo_name": "yashpitrod/Agentic_AI",
-        "current_diff": """
-diff --git a/backend/routes.py b/backend/routes.py
-index e69de29..867cf32 100644
---- a/backend/routes.py
-+++ b/backend/routes.py
-@@ -1,3 +1,11 @@
-+def fetchReviewResult(diffText, prNum):
-+    # Violates standard snake_case naming style and has no error handling
-+    import urllib.request
-+    response = urllib.request.urlopen(f"https://api.github.com/repos/yashpitrod/Agentic_AI/pulls/{prNum}")
-+    return response.read()
-"""
+        "current_diff": (
+            "diff --git a/backend/routes.py b/backend/routes.py\n"
+            "+def fetchReviewResult(diffText, prNum):\n"
+            "+    import urllib.request\n"
+            "+    response = urllib.request.urlopen(f'https://api.github.com/repos/...')\n"
+            "+    return response.read()\n"
+        ),
     }
-    
-    try:
-        output = run_context_agent(test_state)
-        print("\n=== AGENT FINDINGS ARRAY ===")
+
+    async def _main():
         import json
+        output = await run_context_agent(test_state)
         print(json.dumps(output, indent=2))
-    except Exception as err:
-        print(f"Error executing agent test: {err}")
+
+    asyncio.run(_main())

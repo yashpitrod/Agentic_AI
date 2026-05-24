@@ -1,24 +1,54 @@
+from __future__ import annotations
+
+import logging
+import os
+from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
+
+from backend.review_store import init_db
 from backend.routes import router
 
 load_dotenv()
 
+# Configure root logger for the whole application
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    # Startup: initialise the SQLite database
+    logger.info("Starting SilentReviewer — initialising database...")
+    await init_db()
+    yield
+    # Shutdown: nothing to clean up for SQLite
+    logger.info("SilentReviewer shutting down.")
+
+
 app = FastAPI(
     title="SilentReviewer",
     description="Async PR review agent webhook receiver and demo API.",
+    lifespan=lifespan,
 )
 
+# CORS origins from env var (comma-separated), defaulting to localhost
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[origin.strip() for origin in allowed_origins],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(router)
 
+
 @app.get("/health")
-def health():
+async def health():
     return {"status": "ok"}
