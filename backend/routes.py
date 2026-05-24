@@ -8,7 +8,8 @@ import os
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from agents.orchestrator import review_diff, review_pr_data
-from backend.github_fetcher import fetch_pr_data, post_pr_comment
+from backend.github_fetcher import fetch_pr_data
+from backend.review_store import list_reviews, save_review
 from backend.schemas import ManualReviewRequest, WebhookAck
 
 router = APIRouter()
@@ -61,8 +62,8 @@ async def github_webhook(
         try:
             pr_data = fetch_pr_data(repo_name, pr_number)
             review_result = await review_pr_data(pr_data)
-            post_pr_comment(repo_name, pr_number, review_result["markdown"])
-            print("SilentReviewer final review:", review_result["final_review"])
+            save_review(review_result)
+            print("SilentReviewer review summary:", review_result["summary"])
         except Exception as exc:
             print("SilentReviewer review failed:", exc)
             raise HTTPException(status_code=500, detail=f"Review failed: {exc}") from exc
@@ -84,8 +85,17 @@ async def github_webhook(
 
 @router.post("/review")
 async def manual_review(request: ManualReviewRequest):
-    return await review_diff(
+    review_result = await review_diff(
         diff=request.diff,
         repo=request.repo,
         pr_number=request.pr_number,
     )
+    return save_review(review_result)
+
+
+@router.get("/reviews")
+async def get_reviews():
+    return {
+        "count": len(list_reviews()),
+        "reviews": list_reviews(),
+    }
