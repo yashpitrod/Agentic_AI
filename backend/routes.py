@@ -6,7 +6,7 @@ import json
 import logging
 import os
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 from agents.orchestrator import review_diff, review_pr_data
 from backend.github_fetcher import fetch_pr_data
@@ -16,6 +16,30 @@ from backend.schemas import ManualReviewRequest, ReviewListResponse, WebhookAck
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# Manage active websocket connections for real-time dashboard updates
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                pass
+
+
+manager = ConnectionManager()
 
 
 def verify_github_signature(body: bytes, signature_header: str | None) -> None:
@@ -66,7 +90,9 @@ async def github_webhook(
         try:
             pr_data = await fetch_pr_data(repo_name, pr_number)
             review_result = await review_pr_data(pr_data)
-            await save_review(review_result)
+            saved = await save_review(review_result)
+            # Broadcast the completed review to all active websocket dashboard clients
+            await manager.broadcast(saved)
             logger.info("Review completed — severity=%s", review_result.get("summary", {}).get("highest_severity"))
         except Exception as exc:
             logger.error("Review failed for %s#%s: %s", repo_name, pr_number, exc, exc_info=True)
@@ -94,10 +120,25 @@ async def manual_review(request: ManualReviewRequest):
         repo=request.repo,
         pr_number=request.pr_number,
     )
-    return await save_review(review_result)
+    saved = await save_review(review_result)
+    # Broadcast the manual review to all active websocket dashboard clients
+    await manager.broadcast(saved)
+    return saved
 
 
 @router.get("/reviews", response_model=ReviewListResponse)
 async def get_reviews():
     reviews = await list_reviews()
     return ReviewListResponse(count=len(reviews), reviews=reviews)
+
+
+@router.websocket("/ws/reviews")
+async def websocket_endpoint(websocket: WebSocket):
+    # Accept and track new real-time dashboard client connections
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Maintain active connection and detect client-side disconnection
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)

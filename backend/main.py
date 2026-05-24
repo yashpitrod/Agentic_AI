@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
+import aiosqlite
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.review_store import init_db
+from backend.review_store import init_db, _db_path
 from backend.routes import router
 
 load_dotenv()
@@ -51,4 +53,17 @@ app.include_router(router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    db_alive = "disconnected"
+    try:
+        # Ping SQLite database to verify active connection
+        async with aiosqlite.connect(_db_path) as db:
+            await db.execute("SELECT 1")
+        db_alive = "connected"
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "database": db_alive,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
