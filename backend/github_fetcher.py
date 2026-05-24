@@ -7,7 +7,6 @@ import sys
 
 import httpx
 from dotenv import load_dotenv
-from github import Github, GithubException
 
 from backend.schemas import PRData
 
@@ -16,38 +15,49 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
-async def fetch_pr_data(repo_name: str, pr_number: int) -> PRData:
-    # Fetch PR metadata via PyGitHub (sync, wrapped in to_thread) and diff via httpx
+def _github_headers(accept: str) -> dict[str, str]:
     token = os.getenv("GITHUB_TOKEN")
-    if not token:
-        raise ValueError("GITHUB_TOKEN not found in environment variables or .env file.")
-
-    # PyGitHub is synchronous — run in a thread pool
-    def _fetch_metadata():
-        g = Github(token)
-        try:
-            repo = g.get_repo(repo_name)
-        except GithubException as e:
-            msg = e.data.get("message", str(e))
-            raise ValueError(f"Cannot access repository '{repo_name}' ({e.status}): {msg}")
-        try:
-            pr = repo.get_pull(pr_number)
-        except GithubException as e:
-            msg = e.data.get("message", str(e))
-            raise ValueError(f"Cannot access PR #{pr_number} in '{repo_name}' ({e.status}): {msg}")
-        return pr.title, pr.user.login, pr.url
-
-    title, author, pr_api_url = await asyncio.to_thread(_fetch_metadata)
-
-    # Fetch the raw diff via httpx (async)
     headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3.diff",
+        "Accept": accept,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "SilentReviewer",
     }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _access_error(repo_name: str, pr_number: int, action: str, status_code: int) -> ValueError:
+    if status_code == 403:
+        return ValueError(
+            f"Cannot {action} PR #{pr_number} in '{repo_name}' (403). "
+            "For private repos or higher rate limits, configure GITHUB_TOKEN."
+        )
+    return ValueError(f"Cannot {action} PR #{pr_number} in '{repo_name}' ({status_code}).")
+
+
+async def fetch_pr_data(repo_name: str, pr_number: int) -> PRData:
+    # A token is optional here: public repos can be reviewed without auth.
+    pr_api_url = f"https://api.github.com/repos/{repo_name}/pulls/{pr_number}"
+
     async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.get(pr_api_url, headers=headers)
-        response.raise_for_status()
-        diff_text = response.text
+        metadata_response = await client.get(
+            pr_api_url,
+            headers=_github_headers("application/vnd.github+json"),
+        )
+        if metadata_response.status_code in {403, 404}:
+            raise _access_error(repo_name, pr_number, "access", metadata_response.status_code)
+        metadata_response.raise_for_status()
+        metadata = metadata_response.json()
+
+        diff_response = await client.get(
+            pr_api_url,
+            headers=_github_headers("application/vnd.github.v3.diff"),
+        )
+        if diff_response.status_code in {403, 404}:
+            raise _access_error(repo_name, pr_number, "fetch diff for", diff_response.status_code)
+        diff_response.raise_for_status()
+        diff_text = diff_response.text
 
     logger.info("Fetched PR #%d from %s (%d chars diff)", pr_number, repo_name, len(diff_text))
 
@@ -55,8 +65,8 @@ async def fetch_pr_data(repo_name: str, pr_number: int) -> PRData:
         repo_name=repo_name,
         pr_number=pr_number,
         diff_text=diff_text,
-        pr_title=title,
-        author=author,
+        pr_title=metadata.get("title") or "",
+        author=(metadata.get("user") or {}).get("login") or "",
     )
 
 

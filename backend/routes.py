@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, WebSocket, WebSoc
 from agents.orchestrator import review_diff, review_pr_data
 from backend.github_fetcher import fetch_pr_data
 from backend.review_store import list_reviews, save_review
-from backend.schemas import ManualReviewRequest, ReviewListResponse, WebhookAck
+from backend.schemas import ManualReviewRequest, PRReviewRequest, ReviewListResponse, WebhookAck
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +124,25 @@ async def manual_review(request: ManualReviewRequest):
     # Broadcast the manual review to all active websocket dashboard clients
     await manager.broadcast(saved)
     return saved
+
+
+@router.post("/review-pr")
+async def review_pull_request(request: PRReviewRequest):
+    if "/" not in request.repo:
+        raise HTTPException(status_code=400, detail="repo must be in owner/repo format.")
+
+    try:
+        pr_data = await fetch_pr_data(request.repo, request.pr_number)
+        pr_data.post_comment = request.post_comment
+        review_result = await review_pr_data(pr_data)
+        saved = await save_review(review_result)
+        await manager.broadcast(saved)
+        return saved
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("Real PR review failed for %s#%s: %s", request.repo, request.pr_number, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Review failed: {exc}") from exc
 
 
 @router.get("/reviews", response_model=ReviewListResponse)
