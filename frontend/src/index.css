@@ -381,9 +381,10 @@ img {
 /* ── Preview Image ─────────────────────────────────── */
 
 .hero-visual {
-    min-height: 320px;
+    min-height: 200px;
+    max-height: 360px;
     border: 3px solid var(--ink);
-    border-radius: 18px 8px 18px 8px;
+    border-radius: var(--radius-lg);
     background: linear-gradient(160deg, var(--sky), var(--teal));
     padding: 18px;
     display: grid;
@@ -1288,13 +1289,11 @@ img {
 /* ---------- Tablet (≤ 900px) ---------- */
 @media (max-width: 900px) {
     .hero {
-        grid-template-columns: 1fr;
-        min-height: auto;
         gap: 24px;
     }
 
     .hero-visual {
-        min-height: 220px;
+        min-height: 180px;
     }
 
     .hero-copy h1 {
