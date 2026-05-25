@@ -33,7 +33,7 @@ export default function App() {
         </Link>
 
         <button
-          className="nav-toggle"
+          className={`nav-toggle ${navOpen ? 'is-open' : ''}`}
           onClick={() => setNavOpen(!navOpen)}
           aria-label="Toggle navigation"
         >
