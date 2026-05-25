@@ -21,7 +21,7 @@
     --radius: 8px;
     --radius-lg: 14px;
     --radius-xl: 18px;
-    --max-width: 980px;
+    --max-width: 1200px;
     --transition: 120ms ease;
 }
 
@@ -262,11 +262,10 @@ img {
 /* ── Hero Section ──────────────────────────────────── */
 
 .hero {
-    min-height: 70vh;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+    min-height: auto;
+    display: flex;
+    flex-direction: column;
     gap: 30px;
-    align-items: center;
     border: 4px solid var(--ink);
     border-radius: var(--radius-xl);
     padding: clamp(22px, 5vw, 42px);
@@ -1004,7 +1003,8 @@ img {
     grid-template-columns: 1fr auto 1fr;
     gap: 0;
     align-items: stretch;
-    margin-top: 4px;
+    margin-top: 8px;
+    max-width: 100%;
 }
 
 .option-card {
@@ -1058,7 +1058,7 @@ img {
 }
 
 .option-card__body {
-    padding: 16px;
+    padding: 20px;
 }
 
 .option-card__body--center {
@@ -1108,10 +1108,10 @@ img {
 }
 
 .option-card__desc {
-    font-size: 0.88rem;
+    font-size: 0.9rem;
     color: #444;
-    line-height: 1.5;
-    max-width: 280px;
+    line-height: 1.55;
+    max-width: 360px;
 }
 
 .option-divider {
