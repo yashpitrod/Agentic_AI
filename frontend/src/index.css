@@ -381,8 +381,6 @@ img {
 /* ── Preview Image ─────────────────────────────────── */
 
 .hero-visual {
-    min-height: 200px;
-    max-height: 360px;
     border: 3px solid var(--ink);
     border-radius: var(--radius-lg);
     background: linear-gradient(160deg, var(--sky), var(--teal));
@@ -1290,10 +1288,6 @@ img {
 @media (max-width: 900px) {
     .hero {
         gap: 24px;
-    }
-
-    .hero-visual {
-        min-height: 180px;
     }
 
     .hero-copy h1 {
