@@ -1282,6 +1282,23 @@ img {
     color: var(--red);
 }
 
+.connect-done-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.connect-done-item {
+    padding: 10px 16px;
+    border: 2px solid var(--ink);
+    border-radius: var(--radius);
+    background: var(--green);
+    font-size: 0.88rem;
+    font-weight: 600;
+    box-shadow: var(--shadow-xs);
+}
+
 /* ── Responsive ────────────────────────────────────── */
 
 /* ---------- Tablet (≤ 900px) ---------- */

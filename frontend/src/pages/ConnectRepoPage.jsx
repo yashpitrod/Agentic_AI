@@ -18,6 +18,7 @@ export default function ConnectRepoPage() {
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [isInstalling, setIsInstalling] = useState(false)
+  const [connectedRepos, setConnectedRepos] = useState([])
 
   // Step 0 → 1: If we have a session, auth is done
   useEffect(() => {
@@ -69,6 +70,7 @@ export default function ConnectRepoPage() {
 
       const data = await response.json()
       setSuccessMessage(data.message || `SilentReviewer is now watching ${trimmed}.`)
+      setConnectedRepos(prev => [...prev, trimmed])
       setCurrentStep(3)
     } catch (err) {
       setError(err.message)
@@ -78,13 +80,21 @@ export default function ConnectRepoPage() {
     }
   }
 
+  // Reset wizard to connect another repo (reuses same OAuth session)
+  const handleConnectAnother = () => {
+    setRepoName('')
+    setError('')
+    setSuccessMessage('')
+    setCurrentStep(1)
+  }
+
   const getStepStatus = (stepIndex) => {
     if (stepIndex < currentStep) return 'done'
     if (stepIndex === currentStep) return 'active'
     return 'pending'
   }
 
-  // No session — show error state
+  // No session — show error state with clear reconnect option
   if (!sessionId) {
     return (
       <div className="connect-container">
@@ -116,6 +126,17 @@ export default function ConnectRepoPage() {
         <h1>Connect Your Repo</h1>
         <p>Install SilentReviewer on your GitHub repository for automatic PR reviews</p>
       </div>
+
+      {/* Previously connected repos */}
+      {connectedRepos.length > 0 && currentStep < 3 && (
+        <div className="connect-done-list">
+          {connectedRepos.map((repo, i) => (
+            <div key={i} className="connect-done-item">
+              ✅ <strong>{repo}</strong> — connected
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Steps */}
       <div className="connect-steps">
@@ -177,6 +198,20 @@ export default function ConnectRepoPage() {
                       Open any Pull Request on <strong>{repoName}</strong> to get an automatic AI review.
                     </p>
                     <div className="connect-actions">
+                      <button
+                        onClick={handleConnectAnother}
+                        className="btn btn-small btn-primary"
+                        id="connect-another-btn"
+                      >
+                        🔗 Connect Another Repo
+                      </button>
+                      <a
+                        href={`${API_URL}/auth/github`}
+                        className="btn btn-small btn-secondary"
+                        id="fresh-oauth-btn"
+                      >
+                        🔄 Reconnect with GitHub
+                      </a>
                       <Link to="/history" className="btn btn-small btn-teal" id="go-history-btn">
                         View Review History
                       </Link>
@@ -197,9 +232,16 @@ export default function ConnectRepoPage() {
         <div className="connect-error-card">
           <p><strong>Error:</strong> {error}</p>
           <div className="connect-actions">
-            <a href={`${API_URL}/auth/github`} className="btn btn-small" id="reconnect-btn">
+            <a href={`${API_URL}/auth/github`} className="btn btn-small btn-primary" id="reconnect-btn">
               🔗 Reconnect with GitHub
             </a>
+            <button
+              onClick={() => { setError(''); setCurrentStep(1); }}
+              className="btn btn-small"
+              id="try-again-btn"
+            >
+              ↩ Try Again
+            </button>
           </div>
         </div>
       )}
