@@ -4,6 +4,7 @@ import LandingPage from './pages/LandingPage.jsx'
 import LoadingPage from './pages/LoadingPage.jsx'
 import ResultsPage from './pages/ResultsPage.jsx'
 import HistoryPage from './pages/HistoryPage.jsx'
+import ConnectRepoPage from './pages/ConnectRepoPage.jsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="/review" element={<LoadingPage />} />
           <Route path="/results/:id" element={<ResultsPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/connect" element={<ConnectRepoPage />} />
         </Routes>
       </main>
 

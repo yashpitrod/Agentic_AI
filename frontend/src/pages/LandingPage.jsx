@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { API_URL } from '../App.jsx'
 
 /**
  * Parse a GitHub PR URL into { repo, prNumber }.
@@ -70,72 +71,97 @@ export default function LandingPage() {
         </h1>
 
         <p className="hero-line">
-          Paste any public GitHub Pull Request URL below — our AI agents will analyze
-          security, architecture, test coverage, and code consistency in parallel.
+          Try a one-time review on any public PR, or connect your repo for automatic
+          AI reviews on every pull request.
         </p>
 
-        {/* Clear instruction label */}
-        <label
-          htmlFor="pr-url-input"
-          style={{
-            display: 'block',
-            fontSize: '0.82rem',
-            fontWeight: 700,
-            marginBottom: '8px',
-            color: '#333',
-          }}
-        >
-          📋 Paste a GitHub PR URL here:
-        </label>
+        {/* ── Two Option Cards ────────────────────────── */}
+        <div className="hero-options">
 
-        <form className="url-form" onSubmit={handleSubmit} id="pr-url-form">
-          <input
-            type="text"
-            className={`url-input ${error ? 'is-error' : ''}`}
-            value={url}
-            onChange={(e) => { setUrl(e.target.value); setError(''); }}
-            placeholder="https://github.com/facebook/react/pull/31185"
-            aria-label="GitHub PR URL"
-            id="pr-url-input"
-          />
-          <button type="submit" className="btn btn-primary" id="review-btn">
-            Review ↗
-          </button>
-        </form>
+          {/* Option A: Public PR Review */}
+          <div className="option-card" id="option-public-pr">
+            <div className="option-card__header option-card__header--sky">
+              <span className="option-card__badge">A</span>
+              <span className="option-card__title">Try with a Public PR</span>
+            </div>
+            <div className="option-card__body">
+              <label
+                htmlFor="pr-url-input"
+                className="option-card__label"
+              >
+                📋 Paste a GitHub PR URL:
+              </label>
 
-        {error && (
-          <p style={{ color: '#ff4d4d', fontWeight: 600, fontSize: '0.85rem', marginBottom: '8px' }}>
-            {error}
-          </p>
-        )}
+              <form className="url-form" onSubmit={handleSubmit} id="pr-url-form">
+                <input
+                  type="text"
+                  className={`url-input ${error ? 'is-error' : ''}`}
+                  value={url}
+                  onChange={(e) => { setUrl(e.target.value); setError(''); }}
+                  placeholder="https://github.com/facebook/react/pull/31185"
+                  aria-label="GitHub PR URL"
+                  id="pr-url-input"
+                />
+                <button type="submit" className="btn btn-primary" id="review-btn">
+                  Review ↗
+                </button>
+              </form>
 
-        {/* How to get a PR URL — step by step */}
-        <div style={{
-          fontSize: '0.78rem',
-          color: '#777',
-          marginBottom: '16px',
-          lineHeight: 1.6,
-        }}>
-          Go to any GitHub repo → Pull Requests tab → click a PR → copy the URL from your browser
-        </div>
+              {error && (
+                <p className="option-card__error">
+                  {error}
+                </p>
+              )}
 
-        {/* Prominent try-it button */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          flexWrap: 'wrap',
-        }}>
-          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#555' }}>
-            Don't have a PR URL?
-          </span>
-          <button
-            onClick={handleTryExample}
-            className="btn btn-small btn-teal"
-            id="try-example-btn"
-          >
-            🚀 Try with facebook/react PR #31185
-          </button>
+              <div className="option-card__hint">
+                Go to any GitHub repo → Pull Requests tab → click a PR → copy the URL
+              </div>
+
+              <div className="option-card__try">
+                <span>Don't have a PR URL?</span>
+                <button
+                  onClick={handleTryExample}
+                  className="btn btn-small btn-teal"
+                  id="try-example-btn"
+                >
+                  🚀 Try facebook/react #31185
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* OR Divider */}
+          <div className="option-divider">
+            <span>OR</span>
+          </div>
+
+          {/* Option B: Connect Repo */}
+          <div className="option-card" id="option-connect-repo">
+            <div className="option-card__header option-card__header--green">
+              <span className="option-card__badge">B</span>
+              <span className="option-card__title">Connect Your Repo</span>
+            </div>
+            <div className="option-card__body option-card__body--center">
+              <div className="option-card__icon">🔗</div>
+              <p className="option-card__desc">
+                Install SilentReviewer on your own repository for <strong>automatic
+                AI reviews</strong> on every pull request — no manual pasting needed.
+              </p>
+              <a
+                href={`${API_URL}/auth/github`}
+                className="btn btn-primary btn-github"
+                id="connect-github-btn"
+              >
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+                </svg>
+                Connect with GitHub
+              </a>
+              <div className="option-card__hint">
+                Requires admin access to the repository
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -165,4 +191,3 @@ export default function LandingPage() {
     </section>
   )
 }
-

@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.review_store import init_db, _db_path
 from backend.routes import router
+from backend.oauth import oauth_router
 
 load_dotenv()
 
@@ -49,6 +50,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(oauth_router)
 
 
 @app.get("/health")
