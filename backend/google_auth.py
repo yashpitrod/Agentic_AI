@@ -88,7 +88,10 @@ async def google_oauth_start():
 
     # Determine the correct redirect URI based on the request context
     webhook_url = os.getenv("WEBHOOK_URL", "http://localhost:8000")
-    redirect_uri = f"{webhook_url.rstrip('/')}/auth/google/callback"
+    base_url = webhook_url.rstrip('/')
+    if base_url.endswith("/webhook"):
+        base_url = base_url[:-8].rstrip('/')
+    redirect_uri = f"{base_url}/auth/google/callback"
 
     state = secrets.token_urlsafe(32)
     _pending_states[state] = datetime.now(timezone.utc).isoformat()
@@ -125,7 +128,10 @@ async def google_oauth_callback(
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
     webhook_url = os.getenv("WEBHOOK_URL", "http://localhost:8000")
-    redirect_uri = f"{webhook_url.rstrip('/')}/auth/google/callback"
+    base_url = webhook_url.rstrip('/')
+    if base_url.endswith("/webhook"):
+        base_url = base_url[:-8].rstrip('/')
+    redirect_uri = f"{base_url}/auth/google/callback"
 
     # Validate CSRF state
     if state not in _pending_states:
