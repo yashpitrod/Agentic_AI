@@ -204,6 +204,24 @@ export default function ResultsPage() {
         </div>
       </div>
 
+      {/* Clean PR Celebration */}
+      {totalFindings === 0 && (
+        <div className="clean-pr-card" id="clean-pr-card">
+          <div className="clean-pr-icon">✅</div>
+          <h2 className="clean-pr-title">All Clear — No Issues Found!</h2>
+          <p className="clean-pr-desc">
+            All 4 AI agents reviewed this PR and found <strong>zero issues</strong>.
+            This pull request looks clean across security, architecture, test coverage, and code consistency.
+          </p>
+          <div className="clean-pr-agents">
+            <span className="clean-pr-agent">🔒 Security — passed</span>
+            <span className="clean-pr-agent">🏗️ Architecture — passed</span>
+            <span className="clean-pr-agent">🧪 Test Gaps — passed</span>
+            <span className="clean-pr-agent">📏 Consistency — passed</span>
+          </div>
+        </div>
+      )}
+
       {/* Category Cards */}
       <div className="category-cards">
         {CATEGORIES.map((cat) => {
@@ -219,9 +237,13 @@ export default function ResultsPage() {
               >
                 <span>
                   {cat.emoji} {cat.label}
-                  {count > 0 && (
+                  {count > 0 ? (
                     <span className="category-count" style={{ marginLeft: '10px' }}>
                       {count} {count === 1 ? 'issue' : 'issues'}
+                    </span>
+                  ) : (
+                    <span className="category-clean" style={{ marginLeft: '10px' }}>
+                      ✓ Clean
                     </span>
                   )}
                 </span>
@@ -230,7 +252,7 @@ export default function ResultsPage() {
 
               <div className={`category-body ${isOpen ? 'is-open' : ''}`}>
                 {count === 0 ? (
-                  <div className="no-issues">✓ No issues found</div>
+                  <div className="no-issues">✓ No issues found in this category</div>
                 ) : (
                   findings.map((finding, idx) => (
                     <div key={idx} className="finding-item">

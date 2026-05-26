@@ -5,14 +5,14 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-import aiosqlite
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.review_store import init_db, _db_path
+from backend.review_store import init_db, close_db
 from backend.routes import router
 from backend.oauth import oauth_router
+from backend.google_auth import google_auth_router
 
 load_dotenv()
 
@@ -26,11 +26,12 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    # Startup: initialise the SQLite database
-    logger.info("Starting SilentReviewer — initialising database...")
+    # Startup: connect to MongoDB
+    logger.info("Starting SilentReviewer — connecting to MongoDB...")
     await init_db()
     yield
-    # Shutdown: nothing to clean up for SQLite
+    # Shutdown: close MongoDB connection
+    await close_db()
     logger.info("SilentReviewer shutting down.")
 
 
@@ -51,16 +52,18 @@ app.add_middleware(
 
 app.include_router(router)
 app.include_router(oauth_router)
+app.include_router(google_auth_router)
 
 
 @app.get("/health")
 async def health():
     db_alive = "disconnected"
     try:
-        # Ping SQLite database to verify active connection
-        async with aiosqlite.connect(_db_path) as db:
-            await db.execute("SELECT 1")
-        db_alive = "connected"
+        # Ping MongoDB to verify active connection
+        from backend.review_store import _client
+        if _client:
+            await _client.admin.command("ping")
+            db_alive = "connected"
     except Exception:
         pass
 

@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from agents.orchestrator import review_diff, review_pr_data
 from backend.github_fetcher import fetch_pr_data
 from backend.review_store import list_reviews, save_review, get_review_by_id
+from backend.google_auth import extract_user_email
 from backend.schemas import ManualReviewRequest, PRReviewRequest, ReviewListResponse, WebhookAck
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ async def github_webhook(
         try:
             pr_data = await fetch_pr_data(repo_name, pr_number)
             review_result = await review_pr_data(pr_data)
-            saved = await save_review(review_result)
+            saved = await save_review(review_result)  # Webhook reviews have no user
             # Broadcast the completed review to all active websocket dashboard clients
             await manager.broadcast(saved)
             logger.info("Review completed — severity=%s", review_result.get("summary", {}).get("highest_severity"))
@@ -116,20 +117,22 @@ async def github_webhook(
 
 
 @router.post("/review")
-async def manual_review(request: ManualReviewRequest):
+async def manual_review(request: ManualReviewRequest, authorization: str | None = Header(default=None)):
+    user_email = extract_user_email(authorization)
     review_result = await review_diff(
         diff=request.diff,
         repo=request.repo,
         pr_number=request.pr_number,
     )
-    saved = await save_review(review_result)
+    saved = await save_review(review_result, user_email=user_email)
     # Broadcast the manual review to all active websocket dashboard clients
     await manager.broadcast(saved)
     return saved
 
 
 @router.post("/review-pr")
-async def review_pull_request(request: PRReviewRequest):
+async def review_pull_request(request: PRReviewRequest, authorization: str | None = Header(default=None)):
+    user_email = extract_user_email(authorization)
     if "/" not in request.repo:
         raise HTTPException(status_code=400, detail="repo must be in owner/repo format.")
 
@@ -137,7 +140,7 @@ async def review_pull_request(request: PRReviewRequest):
         pr_data = await fetch_pr_data(request.repo, request.pr_number)
         pr_data.post_comment = request.post_comment
         review_result = await review_pr_data(pr_data)
-        saved = await save_review(review_result)
+        saved = await save_review(review_result, user_email=user_email)
         await manager.broadcast(saved)
         return saved
     except ValueError as exc:
@@ -148,8 +151,9 @@ async def review_pull_request(request: PRReviewRequest):
 
 
 @router.post("/review-pr/stream")
-async def review_pr_stream(request: PRReviewRequest):
+async def review_pr_stream(request: PRReviewRequest, authorization: str | None = Header(default=None)):
     """SSE streaming endpoint that emits real-time progress events during PR review."""
+    user_email = extract_user_email(authorization)
     if "/" not in request.repo:
         raise HTTPException(status_code=400, detail="repo must be in owner/repo format.")
 
@@ -193,7 +197,7 @@ async def review_pr_stream(request: PRReviewRequest):
             yield f"data: {event_data}\n\n"
 
         # Stage 5: Save and broadcast
-        saved = await save_review(review_result)
+        saved = await save_review(review_result, user_email=user_email)
         await manager.broadcast(saved)
 
         # Stage 6: Complete — send the review ID and full data
@@ -204,8 +208,9 @@ async def review_pr_stream(request: PRReviewRequest):
 
 
 @router.get("/reviews", response_model=ReviewListResponse)
-async def get_reviews():
-    reviews = await list_reviews()
+async def get_reviews(authorization: str | None = Header(default=None)):
+    user_email = extract_user_email(authorization)
+    reviews = await list_reviews(user_email=user_email)
     return ReviewListResponse(count=len(reviews), reviews=reviews)
 
 

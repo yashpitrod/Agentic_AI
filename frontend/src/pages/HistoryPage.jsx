@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { API_URL } from '../App.jsx'
+import { API_URL, useAuth } from '../App.jsx'
 
 export default function HistoryPage() {
   const [reviews, setReviews] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const navigate = useNavigate()
+  const { user, token } = useAuth()
 
   useEffect(() => {
     async function fetchHistory() {
       try {
-        const response = await fetch(`${API_URL}/reviews`)
+        const headers = {}
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        const response = await fetch(`${API_URL}/reviews`, { headers })
         if (!response.ok) {
           throw new Error(`Failed to load reviews (${response.status})`)
         }
@@ -25,7 +30,7 @@ export default function HistoryPage() {
     }
 
     fetchHistory()
-  }, [])
+  }, [token])
 
   const formatTime = (isoString) => {
     if (!isoString) return '—'
@@ -61,7 +66,10 @@ export default function HistoryPage() {
       <div className="page-head">
         <h1>Review History</h1>
         <p>
-          Browse past PR reviews — click any review to see the full analysis
+          {user
+            ? `Your reviews, ${user.name?.split(' ')[0]} — click any to see the full analysis`
+            : 'Sign in to see your personal review history'
+          }
         </p>
       </div>
 
@@ -88,7 +96,10 @@ export default function HistoryPage() {
         <div className="empty-state">
           <h2>No Reviews Yet</h2>
           <p style={{ marginBottom: '16px' }}>
-            Reviews appear here after they're completed. There are two ways to trigger one:
+            {user
+              ? 'You haven\'t run any reviews yet. Start by reviewing a PR:'
+              : 'Sign in with Google to save personal reviews, or try a quick review:'
+            }
           </p>
           <div className="empty-state-options">
             <div className="empty-state-option">
@@ -100,9 +111,11 @@ export default function HistoryPage() {
               <p>If you connected a repo, open a new Pull Request on it — the review will appear here automatically.</p>
             </div>
           </div>
-          <p style={{ fontSize: '0.78rem', color: '#888', marginTop: '14px' }}>
-            ⚠️ On the free tier, reviews reset when the server restarts.
-          </p>
+          {!user && (
+            <a href={`${API_URL}/auth/google`} className="btn btn-google" style={{ marginTop: '14px' }}>
+              Continue with Google
+            </a>
+          )}
           <Link to="/" className="btn btn-primary" style={{ marginTop: '14px' }}>
             ← Review a PR Now
           </Link>
@@ -111,7 +124,7 @@ export default function HistoryPage() {
 
       {!loading && !error && reviews.length > 0 && (
         <div className="history-list">
-          {reviews.slice(0, 10).map((review, idx) => {
+          {reviews.map((review, idx) => {
             const repo = review.repo || review.state?.repo || 'unknown/repo'
             const prNumber = review.pr_number || review.state?.pr_number || 0
             const severity = String(review.summary?.highest_severity || review.overall_severity || 'clean').toLowerCase()

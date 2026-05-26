@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { API_URL } from '../App.jsx'
+import { API_URL, useAuth } from '../App.jsx'
 
 const STAGES = [
   { key: 'fetching_diff', label: 'Fetching PR diff from GitHub...' },
@@ -23,6 +23,7 @@ export default function LoadingPage() {
   const [error, setError] = useState(null)
   const [progress, setProgress] = useState(0)
   const abortRef = useRef(null)
+  const { token } = useAuth()
 
   // Redirect if accessed without state
   useEffect(() => {
@@ -39,9 +40,13 @@ export default function LoadingPage() {
 
     async function startStream() {
       try {
+        const headers = { 'Content-Type': 'application/json' }
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
         const response = await fetch(`${API_URL}/review-pr/stream`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             repo,
             pr_number: prNumber,
