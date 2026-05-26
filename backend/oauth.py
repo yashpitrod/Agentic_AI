@@ -186,59 +186,132 @@ async def connect_repo(request: ConnectRepoRequest):
     webhook_endpoint = f"{webhook_url.rstrip('/')}/webhook"
     repo = request.repo_name.strip()
 
+    gh_headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "SilentReviewer",
+    }
+
+    hook_payload = {
+        "name": "web",
+        "active": True,
+        "events": ["pull_request"],
+        "config": {
+            "url": webhook_endpoint,
+            "content_type": "json",
+            "secret": webhook_secret,
+            "insecure_ssl": "0",
+        },
+    }
+
     async with httpx.AsyncClient(timeout=15) as client:
+        # Try creating the webhook
         response = await client.post(
             f"https://api.github.com/repos/{repo}/hooks",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "User-Agent": "SilentReviewer",
-            },
-            json={
-                "name": "web",
-                "active": True,
-                "events": ["pull_request"],
-                "config": {
-                    "url": webhook_endpoint,
-                    "content_type": "json",
-                    "secret": webhook_secret,
-                    "insecure_ssl": "0",
-                },
-            },
+            headers=gh_headers,
+            json=hook_payload,
         )
 
-    if response.status_code == 201:
-        logger.info("Webhook installed on %s", repo)
-        return ConnectRepoResponse(
-            success=True,
-            repo=repo,
-            message=f"SilentReviewer webhook installed on {repo}.",
-        )
-    elif response.status_code == 422:
-        # 422 usually means the hook already exists
-        logger.info("Webhook may already exist on %s (422)", repo)
-        return ConnectRepoResponse(
-            success=True,
-            repo=repo,
-            message=f"Webhook already exists on {repo}. You're all set!",
-        )
-    elif response.status_code == 404:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Repository '{repo}' not found or you don't have admin access.",
-        )
-    elif response.status_code == 403:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Permission denied for '{repo}'. You need admin access to install webhooks.",
-        )
-    else:
+        if response.status_code == 201:
+            logger.info("Webhook installed on %s", repo)
+            return ConnectRepoResponse(
+                success=True,
+                repo=repo,
+                message=f"SilentReviewer webhook installed on {repo}.",
+            )
+
+        if response.status_code == 422:
+            # Hook with this URL already exists — find it and update its secret/config
+            logger.info("Webhook already exists on %s (422), updating...", repo)
+            return await _update_existing_hook(
+                client, gh_headers, repo, webhook_endpoint, hook_payload,
+            )
+
+        if response.status_code == 404:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Repository '{repo}' not found or you don't have admin access.",
+            )
+
+        if response.status_code == 403:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Permission denied for '{repo}'. You need admin access to install webhooks.",
+            )
+
         logger.error("Webhook creation failed (%d): %s", response.status_code, response.text)
         raise HTTPException(
             status_code=502,
             detail=f"GitHub API error ({response.status_code}). Please try again.",
         )
+
+
+async def _update_existing_hook(
+    client: httpx.AsyncClient,
+    headers: dict,
+    repo: str,
+    webhook_endpoint: str,
+    hook_payload: dict,
+) -> ConnectRepoResponse:
+    """Find the existing webhook and update it with correct config/secret."""
+    # List all hooks on the repo
+    list_resp = await client.get(
+        f"https://api.github.com/repos/{repo}/hooks",
+        headers=headers,
+    )
+
+    if list_resp.status_code != 200:
+        logger.warning("Could not list hooks on %s (%d)", repo, list_resp.status_code)
+        return ConnectRepoResponse(
+            success=True,
+            repo=repo,
+            message=f"Webhook may already exist on {repo}. If reviews don't appear, remove the old webhook and reconnect.",
+        )
+
+    hooks = list_resp.json()
+    target_hook = None
+    for hook in hooks:
+        config = hook.get("config", {})
+        if config.get("url", "").rstrip("/") == webhook_endpoint.rstrip("/"):
+            target_hook = hook
+            break
+
+    if not target_hook:
+        # URL not found — the 422 was for a different reason
+        logger.warning("No matching hook found on %s, cannot update", repo)
+        return ConnectRepoResponse(
+            success=False,
+            repo=repo,
+            message=f"Could not install webhook on {repo}. Please remove existing webhooks in repo Settings → Webhooks and try again.",
+        )
+
+    # Update the existing hook with correct secret and config
+    hook_id = target_hook["id"]
+    patch_resp = await client.patch(
+        f"https://api.github.com/repos/{repo}/hooks/{hook_id}",
+        headers=headers,
+        json={
+            "active": True,
+            "events": ["pull_request"],
+            "config": hook_payload["config"],
+        },
+    )
+
+    if patch_resp.status_code == 200:
+        logger.info("Webhook #%d updated on %s", hook_id, repo)
+        return ConnectRepoResponse(
+            success=True,
+            repo=repo,
+            message=f"Webhook updated on {repo} with correct configuration.",
+        )
+
+    logger.error("Hook update failed (%d): %s", patch_resp.status_code, patch_resp.text)
+    return ConnectRepoResponse(
+        success=True,
+        repo=repo,
+        message=f"Webhook exists on {repo} but could not be updated. Remove it in repo Settings → Webhooks and reconnect.",
+    )
 
 
 # ---------------------------------------------------------------------------
