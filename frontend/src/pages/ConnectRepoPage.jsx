@@ -194,9 +194,18 @@ export default function ConnectRepoPage() {
                     <p className="connect-success-msg">
                       ✅ {successMessage || 'SilentReviewer is now watching your repo.'}
                     </p>
-                    <p className="connect-success-hint">
-                      Open any Pull Request on <strong>{repoName}</strong> to get an automatic AI review.
-                    </p>
+                    <div className="connect-next-steps">
+                      <p className="connect-next-title">📋 What happens next:</p>
+                      <ol className="connect-next-list">
+                        <li>Open or update a <strong>Pull Request</strong> on <strong>{repoName}</strong></li>
+                        <li>GitHub sends the PR to SilentReviewer automatically</li>
+                        <li>4 AI agents review your code in parallel</li>
+                        <li>The review appears on the <strong>History page</strong></li>
+                      </ol>
+                      <p className="connect-next-note">
+                        ⏳ Nothing will appear in History until you open a PR — the webhook only triggers on PR events.
+                      </p>
+                    </div>
                     <div className="connect-actions">
                       <button
                         onClick={handleConnectAnother}

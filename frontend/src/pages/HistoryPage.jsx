@@ -87,11 +87,24 @@ export default function HistoryPage() {
       {!loading && !error && reviews.length === 0 && (
         <div className="empty-state">
           <h2>No Reviews Yet</h2>
-          <p>
-            Start by reviewing a public GitHub PR — paste any PR URL on the home page.
+          <p style={{ marginBottom: '16px' }}>
+            Reviews appear here after they're completed. There are two ways to trigger one:
           </p>
-          <Link to="/" className="btn btn-primary">
-            ← Review a PR
+          <div className="empty-state-options">
+            <div className="empty-state-option">
+              <strong>Option A — Quick Review</strong>
+              <p>Paste any public GitHub PR URL on the home page and click Review.</p>
+            </div>
+            <div className="empty-state-option">
+              <strong>Option B — Connected Repo</strong>
+              <p>If you connected a repo, open a new Pull Request on it — the review will appear here automatically.</p>
+            </div>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: '#888', marginTop: '14px' }}>
+            ⚠️ On the free tier, reviews reset when the server restarts.
+          </p>
+          <Link to="/" className="btn btn-primary" style={{ marginTop: '14px' }}>
+            ← Review a PR Now
           </Link>
         </div>
       )}
