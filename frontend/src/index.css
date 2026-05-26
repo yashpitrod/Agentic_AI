@@ -58,7 +58,10 @@ textarea {
     font: inherit;
 }
 
-h1, h2, h3, p {
+h1,
+h2,
+h3,
+p {
     margin: 0;
 }
 
@@ -282,8 +285,8 @@ img {
     left: 50%;
     transform: translateX(-50%);
     transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 200ms ease,
-                top 300ms cubic-bezier(0.4, 0, 0.2, 1);
+        opacity 200ms ease,
+        top 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .nav-toggle span:nth-child(1) {
@@ -368,18 +371,35 @@ img {
     color: #444;
 }
 
-.hero-copy > * {
+.hero-copy>* {
     opacity: 0;
     transform: translateY(14px);
     animation: riseIn 420ms ease forwards;
 }
 
-.hero-copy > *:nth-child(1) { animation-delay: 80ms; }
-.hero-copy > *:nth-child(2) { animation-delay: 170ms; }
-.hero-copy > *:nth-child(3) { animation-delay: 260ms; }
-.hero-copy > *:nth-child(4) { animation-delay: 350ms; }
-.hero-copy > *:nth-child(5) { animation-delay: 440ms; }
-.hero-copy > *:nth-child(6) { animation-delay: 530ms; }
+.hero-copy>*:nth-child(1) {
+    animation-delay: 80ms;
+}
+
+.hero-copy>*:nth-child(2) {
+    animation-delay: 170ms;
+}
+
+.hero-copy>*:nth-child(3) {
+    animation-delay: 260ms;
+}
+
+.hero-copy>*:nth-child(4) {
+    animation-delay: 350ms;
+}
+
+.hero-copy>*:nth-child(5) {
+    animation-delay: 440ms;
+}
+
+.hero-copy>*:nth-child(6) {
+    animation-delay: 530ms;
+}
 
 /* ── URL Input Form ────────────────────────────────── */
 
@@ -759,17 +779,37 @@ img {
     background: var(--paper);
 }
 
-.card-security { background: #ffe4e4; }
-.card-security .category-header { background: #ffcccc; }
+.card-security {
+    background: #ffe4e4;
+}
 
-.card-architecture { background: #fff5d9; }
-.card-architecture .category-header { background: var(--yellow); }
+.card-security .category-header {
+    background: #ffcccc;
+}
 
-.card-test-gaps { background: #fff5d9; }
-.card-test-gaps .category-header { background: var(--orange); }
+.card-architecture {
+    background: #fff5d9;
+}
 
-.card-consistency { background: #e8ffe8; }
-.card-consistency .category-header { background: var(--green); }
+.card-architecture .category-header {
+    background: var(--yellow);
+}
+
+.card-test-gaps {
+    background: #fff5d9;
+}
+
+.card-test-gaps .category-header {
+    background: var(--orange);
+}
+
+.card-consistency {
+    background: #e8ffe8;
+}
+
+.card-consistency .category-header {
+    background: var(--green);
+}
 
 .category-body {
     padding: 0;
@@ -813,12 +853,31 @@ img {
     white-space: nowrap;
 }
 
-.severity-critical { background: #ff4d4d; color: #fff; }
-.severity-high { background: #ff4d4d; color: #fff; }
-.severity-warning { background: var(--yellow); }
-.severity-medium { background: var(--orange); }
-.severity-info { background: var(--sky); }
-.severity-low { background: var(--green); }
+.severity-critical {
+    background: #ff4d4d;
+    color: #fff;
+}
+
+.severity-high {
+    background: #ff4d4d;
+    color: #fff;
+}
+
+.severity-warning {
+    background: var(--yellow);
+}
+
+.severity-medium {
+    background: var(--orange);
+}
+
+.severity-info {
+    background: var(--sky);
+}
+
+.severity-low {
+    background: var(--green);
+}
 
 .finding-details {
     font-size: 0.88rem;
@@ -1017,6 +1076,7 @@ img {
         opacity: 0;
         transform: translateY(12px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -1024,13 +1084,25 @@ img {
 }
 
 @keyframes pulseStep {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.01); }
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.01);
+    }
 }
 
 @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .is-revealed {
@@ -1493,6 +1565,7 @@ img {
 
 /* ---------- Phone (≤ 640px) ---------- */
 @media (max-width: 640px) {
+
     /* Header */
     .site-header {
         flex-wrap: wrap;
@@ -1909,6 +1982,7 @@ img {
 
 /* ---------- Small Phone (≤ 420px) ---------- */
 @media (max-width: 420px) {
+
     .site-main,
     .site-header,
     .site-footer {

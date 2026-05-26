@@ -119,6 +119,8 @@ async def github_webhook(
 @router.post("/review")
 async def manual_review(request: ManualReviewRequest, authorization: str | None = Header(default=None)):
     user_email = extract_user_email(authorization)
+    if not user_email:
+        raise HTTPException(status_code=401, detail="Authentication required. Please sign in with Google.")
     review_result = await review_diff(
         diff=request.diff,
         repo=request.repo,
@@ -133,6 +135,8 @@ async def manual_review(request: ManualReviewRequest, authorization: str | None 
 @router.post("/review-pr")
 async def review_pull_request(request: PRReviewRequest, authorization: str | None = Header(default=None)):
     user_email = extract_user_email(authorization)
+    if not user_email:
+        raise HTTPException(status_code=401, detail="Authentication required. Please sign in with Google.")
     if "/" not in request.repo:
         raise HTTPException(status_code=400, detail="repo must be in owner/repo format.")
 
@@ -154,6 +158,8 @@ async def review_pull_request(request: PRReviewRequest, authorization: str | Non
 async def review_pr_stream(request: PRReviewRequest, authorization: str | None = Header(default=None)):
     """SSE streaming endpoint that emits real-time progress events during PR review."""
     user_email = extract_user_email(authorization)
+    if not user_email:
+        raise HTTPException(status_code=401, detail="Authentication required. Please sign in with Google.")
     if "/" not in request.repo:
         raise HTTPException(status_code=400, detail="repo must be in owner/repo format.")
 
@@ -210,16 +216,25 @@ async def review_pr_stream(request: PRReviewRequest, authorization: str | None =
 @router.get("/reviews", response_model=ReviewListResponse)
 async def get_reviews(authorization: str | None = Header(default=None)):
     user_email = extract_user_email(authorization)
+    if not user_email:
+        raise HTTPException(status_code=401, detail="Authentication required. Please sign in with Google.")
     reviews = await list_reviews(user_email=user_email)
     return ReviewListResponse(count=len(reviews), reviews=reviews)
 
 
 @router.get("/reviews/{review_id}")
-async def get_review(review_id: str):
+async def get_review(review_id: str, authorization: str | None = Header(default=None)):
     """Fetch a single review by ID."""
     review = await get_review_by_id(review_id)
     if not review:
         raise HTTPException(status_code=404, detail="Review not found.")
+    
+    review_user_email = review.get("user_email")
+    if review_user_email:
+        user_email = extract_user_email(authorization)
+        if not user_email or user_email != review_user_email:
+            raise HTTPException(status_code=403, detail="Access to this review is denied.")
+            
     return review
 
 

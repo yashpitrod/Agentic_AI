@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { API_URL } from '../App.jsx'
+import { API_URL, useAuth } from '../App.jsx'
 
 /**
  * Parse a GitHub PR URL into { repo, prNumber }.
@@ -32,6 +32,77 @@ export default function LandingPage() {
   const [error, setError] = useState('')
   const [imgFailed, setImgFailed] = useState(false)
   const navigate = useNavigate()
+  const { user, authLoading } = useAuth()
+
+  if (authLoading) {
+    return (
+      <div className="loading-container" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <h1 className="loading-title">Checking Authentication...</h1>
+        <div className="loading-progress" style={{ margin: '20px auto 0', maxWidth: '300px' }}>
+          <div className="loading-progress-fill" style={{ width: '40%' }} />
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <section className="hero" id="hero-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="hero-copy" style={{ maxWidth: '640px', margin: '0 auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <p className="eyebrow">Secure Code Review Agent</p>
+
+          <h1 style={{ fontSize: '2.5rem', lineHeight: '1.2', marginBottom: '20px' }}>
+            AI-powered reviews start with <span className="highlight">Google Sign-in</span>
+          </h1>
+
+          <p className="hero-line" style={{ fontSize: '1.15rem', color: '#444', marginBottom: '30px' }}>
+            Authenticate using Google to get access to SilentReviewer, run manual pull request reviews, and connect your own repositories securely.
+          </p>
+
+          <div className="option-card" id="option-auth-card" style={{ width: '100%', maxWidth: '480px', transform: 'none', boxShadow: '8px 8px 0 var(--ink)', border: '3px solid var(--ink)', background: 'var(--paper)', borderRadius: 'var(--radius-lg)' }}>
+            <div className="option-card__header option-card__header--sky" style={{ display: 'flex', justifyContent: 'center', borderBottom: '3px solid var(--ink)', padding: '12px', background: 'var(--sky)' }}>
+              <span className="option-card__title" style={{ fontSize: '1.2rem', fontWeight: 800 }}>Welcome to SilentReviewer</span>
+            </div>
+            <div className="option-card__body option-card__body--center" style={{ padding: '40px 30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+              <div className="option-card__icon" style={{ fontSize: '3rem', margin: '0 0 10px' }}>🔑</div>
+              <p className="option-card__desc" style={{ textAlign: 'center', fontSize: '0.95rem', color: '#555', margin: 0 }}>
+                Join SilentReviewer to analyze code, identify security issues, check test gaps, and track your review history in one isolated, private dashboard.
+              </p>
+              
+              <a
+                href={`${API_URL}/auth/google`}
+                className="btn btn-google"
+                id="landing-signin-btn"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  fontSize: '1.1rem',
+                  padding: '14px 28px',
+                  borderRadius: '10px',
+                  boxShadow: '4px 4px 0 var(--ink)',
+                  border: '3px solid var(--ink)',
+                  background: '#fff',
+                  cursor: 'pointer',
+                  width: '100%',
+                  marginTop: '10px'
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="22" height="22" style={{ flexShrink: 0 }}>
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                <strong style={{ fontWeight: 800 }}>Continue with Google</strong>
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+    )
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()

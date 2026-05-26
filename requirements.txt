@@ -14,3 +14,4 @@ python-dotenv>=1.0.1
 langchain-google-genai>=2.1.4
 langchain-core>=0.3.62
 PyGithub>=2.5.0
+certifi>=2024.2.2

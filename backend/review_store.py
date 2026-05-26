@@ -12,6 +12,7 @@ import os
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ async def init_db() -> None:
     if not uri:
         raise RuntimeError("MONGODB_URI environment variable is not set.")
 
-    _client = AsyncIOMotorClient(uri)
+    _client = AsyncIOMotorClient(uri, tlsCAFile=certifi.where())
     _db = _client.silentreviewer
 
     # Create index on 'id' for fast lookups and on 'created_at' for sorting
@@ -77,8 +78,8 @@ async def list_reviews(user_email: str | None = None) -> list[dict]:
     if user_email:
         query["user_email"] = user_email
 
-    cursor = _db.reviews.find(query).sort("created_at", -1).limit(50)
-    reviews = await cursor.to_list(length=50)
+    cursor = _db.reviews.find(query).sort("created_at", -1).limit(6)
+    reviews = await cursor.to_list(length=6)
 
     # Remove MongoDB's internal _id from each document
     for r in reviews:

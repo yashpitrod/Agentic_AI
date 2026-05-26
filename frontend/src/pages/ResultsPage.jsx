@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { API_URL } from '../App.jsx'
+import { API_URL, useAuth } from '../App.jsx'
 
 const CATEGORIES = [
   {
@@ -37,6 +37,7 @@ export default function ResultsPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [review, setReview] = useState(null)
+  const { token } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [openCategories, setOpenCategories] = useState({})
@@ -45,7 +46,11 @@ export default function ResultsPage() {
   useEffect(() => {
     async function fetchReview() {
       try {
-        const response = await fetch(`${API_URL}/reviews/${id}`)
+        const headers = {}
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        const response = await fetch(`${API_URL}/reviews/${id}`, { headers })
         if (!response.ok) {
           throw new Error(`Review not found (${response.status})`)
         }
